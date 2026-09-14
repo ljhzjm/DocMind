@@ -1,0 +1,34 @@
+# Provider credentials are referenced by environment variable name only.
+[providers.deepseek]
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+timeout_seconds = 60
+max_retries = 2
+retry_backoff_seconds = 0.5
+
+[providers.qwen]
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key_env = "DASHSCOPE_API_KEY"
+timeout_seconds = 60
+max_retries = 2
+retry_backoff_seconds = 0.5
+
+[models.cheap]
+provider = "deepseek"
+model = "deepseek-chat"
+stream_include_usage = true
+
+[models.strong]
+provider = "deepseek"
+model = "deepseek-reasoner"
+stream_include_usage = true
+
+[models.embedding]
+provider = "qwen"
+model = "text-embedding-v3"
+
+[routes]
+intent_classification = "cheap"
+query_rewrite = "cheap"
+final_generation = "strong"
+embedding = "embedding"
