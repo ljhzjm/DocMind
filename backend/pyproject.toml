@@ -26,6 +26,9 @@ dev = [
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
+markers = [
+    "integration: requires PostgreSQL, Redis, or another real service",
+]
 testpaths = ["tests"]
 
 [tool.coverage.run]
