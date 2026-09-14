@@ -6,6 +6,7 @@ import type {
   AnswerEvent,
   ChatStreamEvent,
   ChatStreamHandlers,
+  CitationContext,
   DoneEvent,
   ErrorEvent,
   RetrievalEvent,
@@ -90,6 +91,7 @@ export function parseSSEBlock(block: string): ChatStreamEvent | null {
       type: 'retrieval',
       latency_ms: requireNumber(rawData, 'latency_ms'),
       chunk_count: requireNumber(rawData, 'chunk_count'),
+      contexts: requireCitationContexts(rawData),
     }
   }
   if (eventName === 'answer') {
@@ -138,6 +140,44 @@ function requireNumber(record: Record<string, unknown>, key: string): number {
   const value = record[key]
   if (typeof value !== 'number') {
     throw new Error(`SSE field '${key}' must be a number`)
+  }
+  return value
+}
+
+function requireCitationContexts(
+  record: Record<string, unknown>,
+): CitationContext[] {
+  const value = record.contexts
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.map((item) => {
+    if (!isRecord(item)) {
+      throw new Error('SSE citation context must be an object')
+    }
+    return {
+      citation_number: requireNumber(item, 'citation_number'),
+      chunk_id: requireString(item, 'chunk_id'),
+      content: requireString(item, 'content'),
+      document_name: requireString(item, 'document_name'),
+      page_number:
+        item.page_number === null ? null : requireNumber(item, 'page_number'),
+      heading_path: requireStringArray(item, 'heading_path'),
+      score: requireNumber(item, 'score'),
+    }
+  })
+}
+
+function requireStringArray(
+  record: Record<string, unknown>,
+  key: string,
+): string[] {
+  const value = record[key]
+  if (
+    !Array.isArray(value) ||
+    !value.every((item) => typeof item === 'string')
+  ) {
+    throw new Error(`SSE field '${key}' must be a string array`)
   }
   return value
 }

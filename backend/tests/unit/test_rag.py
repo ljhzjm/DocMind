@@ -7,21 +7,29 @@ from app.core.config import Settings
 from app.llm.base import (
     ChatResult,
     EmbeddingResult,
+    FinishEvent,
     LLMMessage,
     LLMProvider,
     LLMStreamEvent,
+    TextDeltaEvent,
     TokenUsage,
 )
 from app.rag.answer import (
     AnswerGenerator,
-    CitationValidationError,
     RAGGenerationError,
     validate_answer,
 )
 from app.rag.pipeline import RAGPipeline
 from app.rag.query_rewrite import QueryRewriter, RewriteResult
 from app.rag.rerank import PassthroughReranker
-from app.rag.types import AnswerDeltaEvent, DoneEvent, RAGAnswer, RAGContext, RetrievalEvent
+from app.rag.types import (
+    AnswerDeltaEvent,
+    CitationValidationError,
+    DoneEvent,
+    RAGAnswer,
+    RAGContext,
+    RetrievalEvent,
+)
 from app.retrieval.service import SearchService
 from app.retrieval.types import RetrievalHit, SearchMode
 from pydantic import ValidationError
@@ -202,3 +210,47 @@ async def test_pipeline_refuses_low_score_without_generation() -> None:
     assert answer == "未找到相关资料"
     assert isinstance(events[-1], DoneEvent)
     assert generator.calls == 0
+
+
+class StreamingStubProvider(StubLLMProvider):
+    def __init__(self, streams: Sequence[Sequence[str]]) -> None:
+        super().__init__([])
+        self.streams = [list(stream) for stream in streams]
+
+    def chat_stream(
+        self,
+        messages: Sequence[LLMMessage],
+        *,
+        task: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        del messages, task, temperature, max_tokens
+        stream = self.streams[self.calls]
+        self.calls += 1
+
+        async def events() -> AsyncIterator[LLMStreamEvent]:
+            for chunk in stream:
+                yield TextDeltaEvent(text=chunk)
+            yield FinishEvent(finish_reason="stop")
+
+        return events()
+
+
+@pytest.mark.asyncio
+async def test_answer_generator_streams_only_after_valid_citations() -> None:
+    provider = StreamingStubProvider(
+        [
+            ['{"citations":[2],', '"answer":"invalid [2]"}'],
+            ['{"citations":[1],"ans', 'wer":"合法 [1]"}'],
+        ]
+    )
+
+    events = [
+        event async for event in AnswerGenerator(provider=provider).stream("question", [context()])
+    ]
+    deltas = [event.delta for event in events if isinstance(event, AnswerDeltaEvent)]
+
+    assert provider.calls == 2
+    assert "".join(deltas) == "合法 [1]"
+    assert events[-1] == DoneEvent(citations=[1])

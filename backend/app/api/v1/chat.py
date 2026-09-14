@@ -45,6 +45,18 @@ async def stream_chat(
                     {
                         "latency_ms": event.latency_ms,
                         "chunk_count": event.chunk_count,
+                        "contexts": [
+                            {
+                                "citation_number": context.citation_number,
+                                "chunk_id": str(context.hit.chunk_id),
+                                "content": context.hit.content,
+                                "document_name": context.hit.document_name,
+                                "page_number": context.hit.page_number,
+                                "heading_path": list(context.hit.heading_path),
+                                "score": context.hit.score,
+                            }
+                            for context in event.contexts
+                        ],
                     },
                 )
             elif isinstance(event, AnswerDeltaEvent):

@@ -1,6 +1,6 @@
-/* Vue 概念：全局样式负责页面基础排版，组件内样式负责局部视觉。 */
-/* Vue 概念：响应式状态变化会驱动模板重新渲染，不需要手动操作 DOM。 */
-/* Vue 概念：加载、完成和错误状态都应有清晰且稳定的视觉反馈。 */
+/* Vue 概念：全局样式负责应用框架，页面组件样式默认使用 scoped 避免互相污染。 */
+/* Vue 概念：RouterLink 的 active 状态可映射为导航高亮。 */
+/* Vue 概念：响应式页面需要适配窄屏，避免固定宽度造成内容遮挡。 */
 
 :root {
   color: #17212b;
@@ -28,149 +28,106 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
 
-button {
-  border: 1px solid #0f766e;
-  border-radius: 6px;
-  background: #0f766e;
-  color: #ffffff;
-  cursor: pointer;
-  padding: 0.65rem 1rem;
-}
-
-button:hover:not(:disabled) {
-  background: #0b5f59;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-button.secondary {
-  border-color: #98a7ad;
-  background: #ffffff;
-  color: #26373d;
-}
-
-button.secondary:hover:not(:disabled) {
-  background: #f2f7f7;
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
 #app {
   min-height: 100vh;
 }
 
-.demo-shell {
-  width: min(100% - 2rem, 70rem);
-  margin: 0 auto;
-  padding: 3rem 0;
+.app-layout {
+  min-height: 100vh;
 }
 
-.demo-header {
+.app-header {
+  position: sticky;
+  z-index: 100;
+  top: 0;
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #d4dfe0;
+  background: rgb(245 248 248 / 94%);
+  backdrop-filter: blur(12px);
+  padding: 0.75rem max(1rem, calc((100vw - 84rem) / 2));
 }
 
-.demo-header h1 {
-  margin: 0;
-  font-size: clamp(2.5rem, 8vw, 5rem);
-  line-height: 0.95;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1.1rem;
+  font-weight: 800;
 }
 
-.eyebrow,
-.panel-label {
-  margin: 0 0 0.75rem;
-  color: #0f766e;
+.brand-mark {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 6px;
+  background: #0f766e;
+  color: #ffffff;
   font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
-.status-pill {
-  border: 1px solid #c7d5d7;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #465a60;
-  padding: 0.35rem 0.75rem;
+.main-nav {
+  display: flex;
+  gap: 0.35rem;
 }
 
-.query-form,
-.answer-panel {
-  border: 1px solid #d5e0e1;
+.main-nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 6px;
+  color: #50656a;
+  padding: 0.55rem 0.7rem;
+}
+
+.main-nav a:hover,
+.main-nav a.router-link-active {
+  background: #e2efed;
+  color: #0f665f;
+}
+
+.app-content {
+  width: min(100% - 2rem, 84rem);
+  margin: 0 auto;
+  padding: 1.5rem 0 3rem;
+}
+
+.page-placeholder {
+  border: 1px dashed #b9c9cc;
   border-radius: 8px;
   background: #ffffff;
-  padding: 1.25rem;
+  padding: 2rem;
 }
 
-.query-form {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.query-form label {
-  font-weight: 700;
-}
-
-.query-form textarea {
-  width: 100%;
-  resize: vertical;
-  border: 1px solid #b9c9cc;
-  border-radius: 6px;
-  padding: 0.85rem;
-}
-
-.query-form textarea:focus {
-  border-color: #0f766e;
-  outline: 3px solid rgb(15 118 110 / 14%);
-}
-
-.form-actions {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.retrieval-summary {
-  color: #52656b;
-  font-size: 0.9rem;
-}
-
-.answer-panel {
-  min-height: 12rem;
-  margin-top: 1.5rem;
-}
-
-.answer-text,
-.placeholder {
-  margin: 0;
-  white-space: pre-wrap;
-  line-height: 1.75;
-}
-
-.placeholder {
-  color: #75858a;
-}
-
-.error-message {
-  border-left: 3px solid #c2413b;
-  color: #9f2f2a;
-  padding-left: 0.75rem;
+.page-placeholder h2 {
+  margin-top: 0;
 }
 
 @media (max-width: 640px) {
-  .demo-shell {
-    padding: 1.5rem 0;
-  }
-
-  .demo-header {
+  .app-header {
     align-items: start;
     flex-direction: column;
+  }
+
+  .main-nav {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .app-content {
+    width: min(100% - 1rem, 84rem);
   }
 }

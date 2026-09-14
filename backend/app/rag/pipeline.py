@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from time import perf_counter
 
@@ -64,24 +65,22 @@ class RAGPipeline:
                 top_k=top_k or self._settings.rag_context_top_k,
             )
             retrieval_latency_ms = round((perf_counter() - started_at) * 1000, 3)
+            contexts = [
+                RAGContext(citation_number=index, hit=hit)
+                for index, hit in enumerate(reranked, start=1)
+            ]
             yield RetrievalEvent(
                 latency_ms=retrieval_latency_ms,
                 chunk_count=len(reranked),
+                contexts=tuple(contexts),
             )
 
             if not reranked or reranked[0].score < self._settings.rag_refusal_threshold:
                 async for event in self._refusal_events():
                     yield event
                 return
-
-            contexts = [
-                RAGContext(citation_number=index, hit=hit)
-                for index, hit in enumerate(reranked, start=1)
-            ]
-            answer = await self._answer_generator.generate(query, contexts)
-            for delta in self._split_text(answer.answer):
-                yield AnswerDeltaEvent(delta=delta)
-            yield DoneEvent(citations=answer.citations)
+            async for event in self._answer_generator.stream(query, contexts):
+                yield event
         except (
             LLMError,
             EmbeddingError,
@@ -92,9 +91,10 @@ class RAGPipeline:
             yield ErrorEvent(message=str(exc))
 
     async def _refusal_events(self) -> AsyncIterator[RAGStreamEvent]:
-        """低相关度时直接拒答，不调用生成模型。"""
-        for delta in self._split_text(_REFUSAL_ANSWER):
-            yield AnswerDeltaEvent(delta=delta)
+        """低相关度时直接拒答，不调用生成模型，并按字符发送便于前端显示流式效果。"""
+        for character in _REFUSAL_ANSWER:
+            yield AnswerDeltaEvent(delta=character)
+            await asyncio.sleep(0.03)
         yield DoneEvent(citations=[])
 
     @staticmethod
@@ -103,7 +103,3 @@ class RAGPipeline:
             return SearchMode(value)
         except ValueError:
             return SearchMode.HYBRID
-
-    @staticmethod
-    def _split_text(text: str, chunk_size: int = 24) -> list[str]:
-        return [text[index : index + chunk_size] for index in range(0, len(text), chunk_size)]

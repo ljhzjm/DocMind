@@ -5,6 +5,10 @@ from pydantic import BaseModel, Field
 from app.retrieval.types import RetrievalHit
 
 
+class CitationValidationError(ValueError):
+    """引用编号超出本次检索片段范围。"""
+
+
 class RAGAnswer(BaseModel):
     """模型必须返回的结构化答案。"""
 
@@ -13,9 +17,16 @@ class RAGAnswer(BaseModel):
 
 
 @dataclass(frozen=True)
+class RAGContext:
+    citation_number: int
+    hit: RetrievalHit
+
+
+@dataclass(frozen=True)
 class RetrievalEvent:
     latency_ms: float
     chunk_count: int
+    contexts: tuple[RAGContext, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -34,9 +45,3 @@ class ErrorEvent:
 
 
 RAGStreamEvent = RetrievalEvent | AnswerDeltaEvent | DoneEvent | ErrorEvent
-
-
-@dataclass(frozen=True)
-class RAGContext:
-    citation_number: int
-    hit: RetrievalHit
