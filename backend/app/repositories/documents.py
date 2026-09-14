@@ -60,15 +60,22 @@ def replace_chunks(
             page_number=draft.page_number,
             heading_path=list(draft.heading_path),
             parent_chunk_id=None,
-            embedding=None,
+            embedding=(list(draft.embedding) if draft.embedding is not None else None),
+            is_parent=draft.is_parent,
         )
         for draft in drafts
     ]
     session.add_all(chunks)
     session.flush()
 
+    for chunk, draft in zip(chunks, drafts, strict=True):
+        if draft.parent_index is not None:
+            chunk.parent_chunk_id = chunks[draft.parent_index].id
+
     # BM25 倒排索引与切片在同一事务写入；删除旧 chunks 时数据库级联清理旧 postings。
-    for chunk in chunks:
+    for chunk, draft in zip(chunks, drafts, strict=True):
+        if draft.is_parent:
+            continue
         session.add_all(
             [
                 ChunkTerm(
@@ -80,8 +87,9 @@ def replace_chunks(
             ]
         )
 
-    document.chunk_count = len(drafts)
-    return len(drafts)
+    leaf_chunk_count = sum(1 for draft in drafts if not draft.is_parent)
+    document.chunk_count = leaf_chunk_count
+    return leaf_chunk_count
 
 
 async def list_documents(

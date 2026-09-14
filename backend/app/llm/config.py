@@ -25,6 +25,7 @@ class ModelConfig(BaseModel):
     model: str = Field(min_length=1)
     fallbacks: list[str] = Field(default_factory=list)
     stream_include_usage: bool = False
+    response_format_json: bool = False
     input_cost_per_million: float = Field(default=0.0, ge=0)
     output_cost_per_million: float = Field(default=0.0, ge=0)
 

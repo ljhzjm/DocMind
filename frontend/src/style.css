@@ -79,6 +79,25 @@ a {
   font-size: 0.75rem;
 }
 
+.model-status {
+  border: 1px solid #c8d6d8;
+  border-radius: 999px;
+  color: #5c7075;
+  font-size: 0.72rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.model-status[data-status='configured'] {
+  border-color: #8fc9a9;
+  color: #28734d;
+}
+
+.model-status[data-status='missing'],
+.model-status[data-status='offline'] {
+  border-color: #d9aaa3;
+  color: #a23a31;
+}
+
 .main-nav {
   display: flex;
   gap: 0.35rem;
@@ -120,6 +139,25 @@ a {
   .app-header {
     align-items: start;
     flex-direction: column;
+  }
+
+  .model-status {
+    border: 1px solid #c8d6d8;
+    border-radius: 999px;
+    color: #5c7075;
+    font-size: 0.72rem;
+    padding: 0.35rem 0.6rem;
+  }
+
+  .model-status[data-status='configured'] {
+    border-color: #8fc9a9;
+    color: #28734d;
+  }
+
+  .model-status[data-status='missing'],
+  .model-status[data-status='offline'] {
+    border-color: #d9aaa3;
+    color: #a23a31;
   }
 
   .main-nav {

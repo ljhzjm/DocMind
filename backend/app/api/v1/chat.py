@@ -4,17 +4,23 @@ from functools import lru_cache
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_async_session
+from app.models.enums import MessageRole
 from app.rag.pipeline import RAGPipeline
 from app.rag.types import (
     AnswerDeltaEvent,
     DoneEvent,
     ErrorEvent,
     RetrievalEvent,
+)
+from app.repositories.conversations import (
+    add_message,
+    create_conversation,
+    get_conversation,
 )
 from app.schemas.chat import ChatStreamRequest
 
@@ -34,9 +40,28 @@ async def stream_chat(
 ) -> StreamingResponse:
     """通过 SSE 发送检索元数据、answer 增量和最终引用。"""
 
+    conversation = (
+        await get_conversation(session, request.conversation_id)
+        if request.conversation_id is not None
+        else await create_conversation(session, title=request.query)
+    )
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="conversation not found")
+    await add_message(
+        session,
+        conversation_id=conversation.id,
+        role=MessageRole.USER,
+        content=request.query,
+    )
+
     trace_id = uuid4().hex
 
+    answer_text = ""
+    answer_citations: list[int] = []
+    answer_contexts: list[dict[str, object]] = []
+
     async def event_stream() -> AsyncIterator[str]:
+        nonlocal answer_text, answer_citations, answer_contexts
         async for event in pipeline.stream(
             session,
             request.query,
@@ -44,12 +69,22 @@ async def stream_chat(
             trace_id=trace_id,
         ):
             if isinstance(event, RetrievalEvent):
+                answer_contexts = [
+                    {
+                        "citation_number": context.citation_number,
+                        "chunk_id": str(context.hit.chunk_id),
+                        "document_name": context.hit.document_name,
+                        "page_number": context.hit.page_number,
+                    }
+                    for context in event.contexts
+                ]
                 yield _sse(
                     "retrieval",
                     {
                         "latency_ms": event.latency_ms,
                         "chunk_count": event.chunk_count,
                         "trace_id": trace_id,
+                        "conversation_id": str(conversation.id),
                         "cached": event.cached,
                         "contexts": [
                             {
@@ -66,8 +101,17 @@ async def stream_chat(
                     },
                 )
             elif isinstance(event, AnswerDeltaEvent):
+                answer_text += event.delta
                 yield _sse("answer", {"delta": event.delta})
             elif isinstance(event, DoneEvent):
+                answer_citations = event.citations
+                await add_message(
+                    session,
+                    conversation_id=conversation.id,
+                    role=MessageRole.ASSISTANT,
+                    content=answer_text,
+                    citations=answer_contexts,
+                )
                 yield _sse(
                     "done",
                     {
@@ -90,6 +134,7 @@ async def stream_chat(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "X-Trace-ID": trace_id,
+            "X-Conversation-ID": str(conversation.id),
         },
     )
 

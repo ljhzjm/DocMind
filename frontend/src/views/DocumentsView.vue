@@ -11,7 +11,13 @@ import {
   ElTableColumn,
   ElTag,
 } from 'element-plus'
-import { ListTree, RefreshCw, Upload } from 'lucide-vue-next'
+import {
+  ListTree,
+  RefreshCw,
+  RefreshCcw,
+  RotateCcw,
+  Upload,
+} from 'lucide-vue-next'
 
 import { useDocumentsStore } from '../stores/documents'
 import type { DocumentItem, DocumentStatus } from '../types/documents'
@@ -88,6 +94,14 @@ function documentDate(row: unknown): string {
 function openDocumentChunks(row: unknown): void {
   void documents.openChunks(asDocument(row))
 }
+
+function rebuildDocumentEmbeddings(row: unknown): void {
+  void documents.rebuildEmbeddings(asDocument(row))
+}
+
+function reprocessDocumentRow(row: unknown): void {
+  void documents.reprocess(asDocument(row))
+}
 </script>
 
 <template>
@@ -146,7 +160,7 @@ function openDocumentChunks(row: unknown): void {
       <ElTableColumn label="上传时间" min-width="180">
         <template #default="{ row }">{{ documentDate(row) }}</template>
       </ElTableColumn>
-      <ElTableColumn label="操作" width="120" fixed="right">
+      <ElTableColumn label="操作" width="310" fixed="right">
         <template #default="{ row }">
           <ElButton
             text
@@ -156,6 +170,22 @@ function openDocumentChunks(row: unknown): void {
             @click="openDocumentChunks(row)"
           >
             查看切片
+          </ElButton>
+          <ElButton
+            text
+            :icon="RefreshCcw"
+            :disabled="row.status === 'parsing'"
+            @click="rebuildDocumentEmbeddings(row)"
+          >
+            重建向量
+          </ElButton>
+          <ElButton
+            text
+            :icon="RotateCcw"
+            :disabled="row.status === 'parsing'"
+            @click="reprocessDocumentRow(row)"
+          >
+            重新解析
           </ElButton>
         </template>
       </ElTableColumn>

@@ -34,3 +34,8 @@ export interface DocumentStatusResponse {
   status: DocumentStatus
   chunk_count: number
 }
+export interface EmbeddingTaskResponse {
+  document_id: string
+  task_id: string
+  status: DocumentStatus
+}

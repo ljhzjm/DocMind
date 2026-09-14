@@ -43,3 +43,9 @@ class ChunkListItem(BaseModel):
     content: str
     page_number: int | None
     heading_path: list[str]
+
+
+class EmbeddingTaskResponse(BaseModel):
+    document_id: UUID
+    task_id: str
+    status: DocumentStatus

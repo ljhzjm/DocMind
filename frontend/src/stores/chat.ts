@@ -6,7 +6,13 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { streamChat } from '../api/chatStream'
-import type { ChatMessage, ChatSession } from '../types/chat'
+import {
+  createConversation,
+  fetchConversationMessages,
+  fetchConversations,
+} from '../api/conversations'
+import type { ConversationMessage } from '../types/conversation'
+import type { ChatMessage, ChatSession, CitationContext } from '../types/chat'
 
 export type ChatStatus =
   'idle' | 'streaming' | 'completed' | 'stopped' | 'error'
@@ -17,7 +23,7 @@ function createId(): string {
 
 function createSession(): ChatSession {
   return {
-    id: createId(),
+    id: `local-${createId()}`,
     title: '新会话',
     messages: [],
   }
@@ -105,6 +111,7 @@ export const useChatStore = defineStore('chat', () => {
   const status = ref<ChatStatus>('idle')
   const retrievalSummary = ref('')
   let activeController: AbortController | null = null
+  const loadedSessionIds = new Set<string>()
 
   const activeSession = computed(
     () =>
@@ -116,22 +123,55 @@ export const useChatStore = defineStore('chat', () => {
     () => query.value.trim().length > 0 && !isStreaming.value,
   )
 
-  function newSession(): void {
+  async function loadSessions(): Promise<void> {
+    try {
+      const stored = await fetchConversations()
+      if (stored.length === 0) {
+        return
+      }
+      sessions.value = stored.map((conversation) => ({
+        id: conversation.id,
+        title: conversation.title,
+        messages: [],
+      }))
+      activeSessionId.value = sessions.value[0]?.id ?? ''
+      await selectSession(activeSessionId.value)
+    } catch {
+      // 会话接口暂时不可用时保留当前本地会话，不阻塞聊天主流程。
+    }
+  }
+
+  async function newSession(): Promise<void> {
     if (isStreaming.value) {
       stop()
     }
-    const session = createSession()
+    const conversation = await createConversation('新会话')
+    const session: ChatSession = {
+      id: conversation.id,
+      title: conversation.title,
+      messages: [],
+    }
     sessions.value.unshift(session)
     activeSessionId.value = session.id
+    loadedSessionIds.add(session.id)
     resetInput()
   }
 
-  function selectSession(sessionId: string): void {
+  async function selectSession(sessionId: string): Promise<void> {
     if (isStreaming.value) {
       stop()
     }
     activeSessionId.value = sessionId
     resetInput()
+    if (loadedSessionIds.has(sessionId) || sessionId.startsWith('local-')) {
+      return
+    }
+    const storedMessages = await fetchConversationMessages(sessionId)
+    const session = sessions.value.find((item) => item.id === sessionId)
+    if (session !== undefined) {
+      session.messages = storedMessages.map(toChatMessage)
+      loadedSessionIds.add(sessionId)
+    }
   }
 
   function deleteSession(sessionId: string): void {
@@ -161,7 +201,17 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     if (session.messages.length === 0) {
-      session.title = currentQuery.slice(0, 24)
+      if (session.id.startsWith('local-')) {
+        const conversation = await createConversation(currentQuery.slice(0, 24))
+        const previousId = session.id
+        session.id = conversation.id
+        session.title = conversation.title
+        loadedSessionIds.delete(previousId)
+        loadedSessionIds.add(session.id)
+        activeSessionId.value = session.id
+      } else {
+        session.title = currentQuery.slice(0, 24)
+      }
     }
     session.messages.push({
       id: createId(),
@@ -195,24 +245,29 @@ export const useChatStore = defineStore('chat', () => {
     )
 
     try {
-      await streamChat(currentQuery, activeController.signal, {
-        onRetrieval(event) {
-          assistant.contexts = event.contexts
-          assistant.traceId = event.trace_id
-          assistant.cached = event.cached
-          retrievalSummary.value = `检索完成：${event.chunk_count} 个片段，${event.latency_ms.toFixed(1)} ms`
+      await streamChat(
+        currentQuery,
+        activeController.signal,
+        {
+          onRetrieval(event) {
+            assistant.contexts = event.contexts
+            assistant.traceId = event.trace_id
+            assistant.cached = event.cached
+            retrievalSummary.value = `检索完成：${event.chunk_count} 个片段，${event.latency_ms.toFixed(1)} ms`
+          },
+          onAnswer(event) {
+            renderer.push(event.delta)
+          },
+          onDone(event) {
+            assistant.traceId = event.trace_id
+            renderer.complete(event.citations)
+          },
+          onError(event) {
+            renderer.fail(event.message)
+          },
         },
-        onAnswer(event) {
-          renderer.push(event.delta)
-        },
-        onDone(event) {
-          assistant.traceId = event.trace_id
-          renderer.complete(event.citations)
-        },
-        onError(event) {
-          renderer.fail(event.message)
-        },
-      })
+        { conversationId: session.id },
+      )
     } catch (error: unknown) {
       renderer.cancel()
       if (error instanceof DOMException && error.name === 'AbortError') {
@@ -253,8 +308,36 @@ export const useChatStore = defineStore('chat', () => {
     canSend,
     send,
     stop,
+    loadSessions,
     newSession,
     selectSession,
     deleteSession,
   }
 })
+function toChatMessage(message: ConversationMessage): ChatMessage {
+  const citations = (message.citations ?? [])
+    .map((item) => Number(item.citation_number))
+    .filter((value) => Number.isInteger(value))
+  const contexts: CitationContext[] = (message.citations ?? []).map((item) => ({
+    citation_number: Number(item.citation_number),
+    chunk_id: String(item.chunk_id ?? ''),
+    content: String(item.content ?? ''),
+    document_name: String(item.document_name ?? ''),
+    page_number: typeof item.page_number === 'number' ? item.page_number : null,
+    heading_path: Array.isArray(item.heading_path)
+      ? item.heading_path.map(String)
+      : [],
+    score: typeof item.score === 'number' ? item.score : 0,
+  }))
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    citations,
+    contexts,
+    error: '',
+    streaming: false,
+    traceId: null,
+    cached: false,
+  }
+}

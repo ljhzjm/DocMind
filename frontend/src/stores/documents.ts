@@ -8,7 +8,9 @@ import { defineStore } from 'pinia'
 import {
   fetchDocumentChunks,
   fetchDocuments,
+  backfillDocumentEmbeddings,
   fetchDocumentStatus,
+  reprocessDocument,
   uploadDocument,
 } from '../api/documents'
 import type {
@@ -76,6 +78,29 @@ export const useDocumentsStore = defineStore('documents', () => {
     syncPolling()
   }
 
+  async function rebuildEmbeddings(document: DocumentItem): Promise<void> {
+    errorMessage.value = ''
+    try {
+      await backfillDocumentEmbeddings(document.document_id)
+      document.status = 'parsing'
+      syncPolling()
+    } catch (error: unknown) {
+      errorMessage.value =
+        error instanceof Error ? error.message : '向量任务失败'
+    }
+  }
+
+  async function reprocess(document: DocumentItem): Promise<void> {
+    errorMessage.value = ''
+    try {
+      await reprocessDocument(document.document_id)
+      document.status = 'parsing'
+      syncPolling()
+    } catch (error: unknown) {
+      errorMessage.value =
+        error instanceof Error ? error.message : '重新解析失败'
+    }
+  }
   async function openChunks(document: DocumentItem): Promise<void> {
     selectedDocument.value = document
     chunks.value = []
@@ -121,6 +146,8 @@ export const useDocumentsStore = defineStore('documents', () => {
     upload,
     openChunks,
     closeChunks,
+    rebuildEmbeddings,
+    reprocess,
     stopPolling,
   }
 })

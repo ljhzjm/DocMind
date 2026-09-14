@@ -92,6 +92,28 @@ try {
         -NoNewWindow `
         -PassThru
 
+    $apiReady = $false
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+        if ($backendProcess.HasExited) {
+            throw "Backend exited with code $($backendProcess.ExitCode)."
+        }
+        try {
+            $health = Invoke-RestMethod `
+                -Uri 'http://127.0.0.1:18000/api/health' `
+                -TimeoutSec 2
+            if ($health.status -eq 'ok') {
+                $apiReady = $true
+                break
+            }
+        }
+        catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+    if (-not $apiReady) {
+        throw 'Backend health check did not become ready within 30 seconds.'
+    }
+
     $frontendProcess = Start-Process `
         -FilePath (Get-Command node).Source `
         -ArgumentList @('node_modules/vite/bin/vite.js') `
@@ -102,7 +124,7 @@ try {
     Write-Host ''
     Write-Host 'DocMind is running:' -ForegroundColor Green
     Write-Host '  Frontend: http://127.0.0.1:15173'
-    Write-Host '  API:      http://127.0.0.1:18000/health'
+    Write-Host '  API:      http://127.0.0.1:18000/api/health'
     Write-Host '  Worker:   Celery ingestion worker'
     Write-Host 'Press Ctrl+C to stop API, worker, and frontend processes.'
 

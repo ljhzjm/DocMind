@@ -29,13 +29,21 @@ class Settings(BaseSettings):
     allowed_upload_extensions: str = ".pdf,.md,.markdown"
     chunk_size: int = 512
     chunk_overlap: int = 64
+    parent_child_enabled: bool = True
+    parent_chunk_size: int = 2048
+    embedding_batch_size: int = 16
+    ocr_enabled: bool = False
+    ocr_language: str = "chi_sim+eng"
     retrieval_top_k: int = 10
     rag_candidate_top_k: int = 20
     rag_context_top_k: int = 5
     rag_refusal_threshold: float = 0.0
     rag_retrieval_mode: str = "hybrid"
-    rerank_enabled: bool = False
-    rerank_provider: str = "passthrough"
+    rerank_enabled: bool = True
+    rerank_provider: str = "llm"
+    rerank_base_url: str = ""
+    rerank_api_key_env: str = "RERANK_API_KEY"
+    rerank_timeout_seconds: float = 30.0
     celery_broker_url: str = ""
     celery_result_backend: str = ""
     answer_cache_enabled: bool = True
@@ -44,12 +52,25 @@ class Settings(BaseSettings):
     rate_limit_capacity: int = 60
     rate_limit_refill_per_second: float = 1.0
     log_level: str = "INFO"
+    cors_origins: str = "http://127.0.0.1:15173,http://localhost:15173"
+    require_api_key: bool = False
+    api_keys: str = ""
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def allowed_cors_origins(self) -> list[str]:
+        """返回 CORS 白名单列表。"""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def allowed_api_keys(self) -> frozenset[str]:
+        """返回允许访问 API 的密钥集合，真实值只从环境变量读取。"""
+        return frozenset(key.strip() for key in self.api_keys.split(",") if key.strip())
 
     @property
     def allowed_extensions(self) -> frozenset[str]:
@@ -64,8 +85,12 @@ class Settings(BaseSettings):
     def validate_chunk_configuration(self) -> Self:
         if self.chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
+        if self.embedding_batch_size <= 0:
+            raise ValueError("embedding_batch_size must be positive")
         if self.chunk_overlap < 0 or self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be between 0 and chunk_size")
+        if self.parent_chunk_size < self.chunk_size:
+            raise ValueError("parent_chunk_size must be >= chunk_size")
         if self.rag_candidate_top_k <= 0 or self.rag_context_top_k <= 0:
             raise ValueError("RAG top_k values must be positive")
         if self.rag_refusal_threshold < 0:

@@ -6,6 +6,7 @@ import type {
   EvalDatasetSummary,
   EvalRunRequest,
   EvalRunResponse,
+  EvaluationRunSummary,
 } from '../types/evaluation'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(
@@ -32,6 +33,23 @@ export async function runEvaluation(
   })
   if (!response.ok) {
     throw new Error(`评测运行失败：${response.status}`)
+  }
+  return (await response.json()) as EvalRunResponse
+}
+export async function fetchEvaluationRuns(): Promise<EvaluationRunSummary[]> {
+  const response = await fetch(`${EVAL_URL}/runs`)
+  if (!response.ok) {
+    throw new Error(`评测历史请求失败：${response.status}`)
+  }
+  return (await response.json()) as EvaluationRunSummary[]
+}
+
+export async function fetchEvaluationRun(
+  runId: string,
+): Promise<EvalRunResponse> {
+  const response = await fetch(`${EVAL_URL}/runs/${runId}`)
+  if (!response.ok) {
+    throw new Error(`评测记录请求失败：${response.status}`)
   }
   return (await response.json()) as EvalRunResponse
 }

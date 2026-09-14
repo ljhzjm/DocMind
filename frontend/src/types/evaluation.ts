@@ -30,7 +30,11 @@ export interface CaseMetrics {
   ragas_faithfulness: number | null
   ragas_answer_relevance: number | null
   latency_ms: number
+  first_token_latency_ms: number
+  input_tokens: number
+  output_tokens: number
   estimated_cost: number
+  refused: boolean
   error: string | null
 }
 
@@ -43,11 +47,23 @@ export interface ConfigMetrics extends RetrievalConfigInput {
   ragas_faithfulness: number | null
   ragas_answer_relevance: number | null
   average_latency_ms: number
+  average_first_token_latency_ms: number
+  average_input_tokens: number
+  average_output_tokens: number
   average_estimated_cost: number
+  refusal_rate: number
+  hallucination_risk: number
   cases: CaseMetrics[]
 }
 
 export interface EvalRunResponse {
+  run_id: string
   dataset_name: string
   results: ConfigMetrics[]
+}
+
+export interface EvaluationRunSummary {
+  run_id: string
+  dataset_name: string
+  created_at: string
 }

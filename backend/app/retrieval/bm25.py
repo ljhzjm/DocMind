@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.chunk_term import ChunkTerm
 from app.models.document import Chunk, Document
 from app.models.enums import DocumentStatus
+from app.retrieval.parents import expand_parent_hits
 from app.retrieval.tokenization import tokenize
 from app.retrieval.types import RetrievalHit
 
@@ -68,7 +69,10 @@ async def bm25_search(
         select(func.count(func.distinct(ChunkTerm.chunk_id)))
         .join(Chunk, Chunk.id == ChunkTerm.chunk_id)
         .join(Document, Document.id == Chunk.document_id)
-        .where(Document.status == DocumentStatus.READY)
+        .where(
+            Document.status == DocumentStatus.READY,
+            Chunk.is_parent.is_(False),
+        )
     )
     if not total_documents:
         return []
@@ -80,7 +84,10 @@ async def bm25_search(
         )
         .join(Chunk, Chunk.id == ChunkTerm.chunk_id)
         .join(Document, Document.id == Chunk.document_id)
-        .where(Document.status == DocumentStatus.READY)
+        .where(
+            Document.status == DocumentStatus.READY,
+            Chunk.is_parent.is_(False),
+        )
         .group_by(ChunkTerm.chunk_id)
         .subquery()
     )
@@ -140,7 +147,10 @@ async def bm25_search(
                     Document.filename,
                 )
                 .join(Document, Document.id == Chunk.document_id)
-                .where(Chunk.id.in_(ranked_ids))
+                .where(
+                    Chunk.id.in_(ranked_ids),
+                    Chunk.is_parent.is_(False),
+                )
             )
         )
         .mappings()
@@ -165,4 +175,4 @@ async def bm25_search(
                 sources=("bm25",),
             )
         )
-    return results
+    return await expand_parent_hits(session, results)

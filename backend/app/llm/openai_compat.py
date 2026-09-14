@@ -50,6 +50,7 @@ class OpenAICompatibleProvider(LLMProvider):
         max_retries: int = 2,
         retry_backoff_seconds: float = 0.5,
         stream_include_usage: bool = False,
+        response_format_json: bool = False,
         default_headers: Mapping[str, str] | None = None,
         client: httpx.AsyncClient | None = None,
         recorder: CostRecorder | None = None,
@@ -59,6 +60,7 @@ class OpenAICompatibleProvider(LLMProvider):
         self._provider_name = provider_name
         self._model = model
         self._stream_include_usage = stream_include_usage
+        self._response_format_json = response_format_json
         self._recorder = recorder or LoggingCostRecorder()
         headers = {
             "Accept": "application/json",
@@ -247,6 +249,8 @@ class OpenAICompatibleProvider(LLMProvider):
             payload["temperature"] = temperature
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
+        if self._response_format_json:
+            payload["response_format"] = {"type": "json_object"}
         if stream and self._stream_include_usage:
             payload["stream_options"] = {"include_usage": True}
         return payload

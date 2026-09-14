@@ -1,4 +1,5 @@
 import logging
+import secrets
 from collections.abc import Awaitable, Callable
 from time import perf_counter
 from uuid import uuid4
@@ -48,13 +49,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._limiter = TokenBucketRateLimiter()
 
     async def dispatch(self, request: Request, call_next: NextCall) -> Response:
-        if not request.url.path.startswith("/api"):
+        if not request.url.path.startswith("/api") or request.url.path == "/api/health":
             return await call_next(request)
 
         settings = get_settings()
         client_ip = request.client.host if request.client else "unknown"
         session_id = request.headers.get("x-session-id", "anonymous")
-        decision = await self._limiter.check(f"{client_ip}:{session_id}")
+        api_key = request.headers.get("x-api-key", "").strip()
+        identity = f"api-key:{api_key[:12]}" if api_key else f"{client_ip}:{session_id}"
+        decision = await self._limiter.check(identity)
         if not decision.allowed:
             return JSONResponse(
                 status_code=429,
@@ -63,5 +66,29 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "Retry-After": str(max(1, decision.retry_after_seconds)),
                     "X-RateLimit-Limit": str(settings.rate_limit_capacity),
                 },
+            )
+        return await call_next(request)
+
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    """生产环境可选 API Key 鉴权。"""
+
+    async def dispatch(self, request: Request, call_next: NextCall) -> Response:
+        settings = get_settings()
+        if (
+            not settings.require_api_key
+            or not request.url.path.startswith("/api")
+            or request.url.path == "/api/health"
+        ):
+            return await call_next(request)
+
+        provided_key = request.headers.get("x-api-key", "")
+        valid = any(
+            secrets.compare_digest(provided_key, allowed) for allowed in settings.allowed_api_keys
+        )
+        if not valid:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "invalid or missing API key"},
             )
         return await call_next(request)

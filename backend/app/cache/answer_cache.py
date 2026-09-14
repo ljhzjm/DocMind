@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.redis import get_redis
 from app.models.document import Document
 from app.models.enums import DocumentStatus
+from app.repositories.knowledge_base import get_knowledge_base_revision
 
 
 class CachedContext(BaseModel):
@@ -53,6 +54,9 @@ def cache_key(
 
 
 async def knowledge_base_version(session: AsyncSession) -> str:
+    revision = await get_knowledge_base_revision(session)
+    if revision > 0:
+        return f"revision-{revision}"
     row = (
         await session.execute(
             select(

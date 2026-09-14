@@ -43,6 +43,7 @@ class DoneEvent:
     trace_id: str | None = None
     usage: TokenUsage = field(default_factory=TokenUsage)
     model_name: str = ""
+    estimated_cost: float = 0.0
 
 
 @dataclass(frozen=True)

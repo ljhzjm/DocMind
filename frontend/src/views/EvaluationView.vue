@@ -16,10 +16,16 @@ import {
 } from 'element-plus'
 import { Play, Plus, Trash2 } from 'lucide-vue-next'
 
-import { fetchEvalDatasets, runEvaluation } from '../api/evaluation'
+import {
+  fetchEvalDatasets,
+  fetchEvaluationRun,
+  fetchEvaluationRuns,
+  runEvaluation,
+} from '../api/evaluation'
 import type {
   ConfigMetrics,
   EvalDatasetSummary,
+  EvaluationRunSummary,
   RetrievalConfigInput,
   SearchMode,
 } from '../types/evaluation'
@@ -29,6 +35,8 @@ const datasetName = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 const results = ref<ConfigMetrics[]>([])
+const evaluationRuns = ref<EvaluationRunSummary[]>([])
+const selectedRunId = ref('')
 const configs = ref<RetrievalConfigInput[]>([
   { name: '向量 Top5', mode: 'vector', top_k: 5, rerank: false },
   { name: 'BM25 Top5', mode: 'bm25', top_k: 5, rerank: false },
@@ -38,12 +46,30 @@ const configs = ref<RetrievalConfigInput[]>([
 onMounted(async () => {
   try {
     datasets.value = await fetchEvalDatasets()
+    evaluationRuns.value = await fetchEvaluationRuns()
     datasetName.value = datasets.value[0]?.dataset_name ?? ''
   } catch (error: unknown) {
     errorMessage.value =
       error instanceof Error ? error.message : '数据集加载失败'
   }
 })
+
+async function loadEvaluationRun(): Promise<void> {
+  if (selectedRunId.value.length === 0) {
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const response = await fetchEvaluationRun(selectedRunId.value)
+    results.value = response.results
+  } catch (error: unknown) {
+    errorMessage.value =
+      error instanceof Error ? error.message : '历史评测加载失败'
+  } finally {
+    loading.value = false
+  }
+}
 
 function addConfig(): void {
   configs.value.push({
@@ -70,6 +96,8 @@ async function run(): Promise<void> {
       configs: configs.value,
     })
     results.value = response.results
+    evaluationRuns.value = await fetchEvaluationRuns()
+    selectedRunId.value = response.run_id
   } catch (error: unknown) {
     errorMessage.value = error instanceof Error ? error.message : '评测失败'
   } finally {
@@ -128,6 +156,25 @@ function ragasTagType(value: number | null): 'success' | 'info' {
         <ElButton :icon="Plus" @click="addConfig">添加配置</ElButton>
       </div>
 
+      <div class="history-row">
+        <label>历史运行</label>
+        <ElSelect
+          v-model="selectedRunId"
+          placeholder="选择历史评测"
+          style="width: 24rem"
+        >
+          <ElOption
+            v-for="evaluationRun in evaluationRuns"
+            :key="evaluationRun.run_id"
+            :label="`${evaluationRun.dataset_name} · ${new Date(evaluationRun.created_at).toLocaleString()}`"
+            :value="evaluationRun.run_id"
+          />
+        </ElSelect>
+        <ElButton :disabled="!selectedRunId" @click="loadEvaluationRun">
+          加载历史
+        </ElButton>
+      </div>
+
       <div v-for="(config, index) in configs" :key="index" class="config-row">
         <ElInput v-model="config.name" placeholder="配置名称" />
         <ElSelect v-model="config.mode">
@@ -158,8 +205,12 @@ function ragasTagType(value: number | null): 'success' | 'info' {
             <th>配置</th>
             <th>Recall@5</th>
             <th>MRR</th>
+            <th>首字延迟</th>
+            <th>平均 Token</th>
             <th>忠实度</th>
             <th>相关性</th>
+            <th>拒答率</th>
+            <th>幻觉风险</th>
             <th>平均延迟</th>
             <th>平均成本</th>
           </tr>
@@ -175,6 +226,11 @@ function ragasTagType(value: number | null): 'success' | 'info' {
               </td>
               <td>{{ percent(result.recall_at_5) }}</td>
               <td>{{ score(result.mrr) }}</td>
+              <td>{{ result.average_first_token_latency_ms.toFixed(1) }} ms</td>
+              <td>
+                {{ result.average_input_tokens.toFixed(0) }} /
+                {{ result.average_output_tokens.toFixed(0) }}
+              </td>
               <td>
                 {{ score(result.faithfulness) }}
                 <ElTag
@@ -193,11 +249,13 @@ function ragasTagType(value: number | null): 'success' | 'info' {
                   RAGAS {{ ragasScore(result.ragas_answer_relevance) }}
                 </ElTag>
               </td>
+              <td>{{ percent(result.refusal_rate) }}</td>
+              <td>{{ percent(result.hallucination_risk) }}</td>
               <td>{{ result.average_latency_ms.toFixed(1) }} ms</td>
               <td>${{ result.average_estimated_cost.toFixed(6) }}</td>
             </tr>
             <tr class="detail-row">
-              <td colspan="7">
+              <td colspan="11">
                 <ElTable :data="result.cases" size="small">
                   <ElTableColumn prop="question" label="问题" min-width="260" />
                   <ElTableColumn label="Recall@5" width="100">
@@ -239,6 +297,7 @@ function ragasTagType(value: number | null): 'success' | 'info' {
 
 .page-header,
 .dataset-row,
+.history-row,
 .config-row {
   display: flex;
   align-items: center;
@@ -277,6 +336,11 @@ function ragasTagType(value: number | null): 'success' | 'info' {
 
 .dataset-row {
   flex-wrap: wrap;
+}
+
+.history-row {
+  border-top: 1px solid #e2eaeb;
+  padding-top: 0.75rem;
 }
 
 .config-row {

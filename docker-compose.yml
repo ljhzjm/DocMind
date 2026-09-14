@@ -35,6 +35,67 @@ services:
       timeout: 3s
       retries: 12
 
+  backend:
+    profiles: ["app"]
+    build:
+      context: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-docmind}:${POSTGRES_PASSWORD:-docmind_local}@postgres:5432/${POSTGRES_DB:-docmind}
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /app/storage/uploads
+    ports:
+      - "127.0.0.1:18000:8000"
+    volumes:
+      - upload_data:/app/storage/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    profiles: ["app"]
+    build:
+      context: ./backend
+    command:
+      [
+        "uv",
+        "run",
+        "celery",
+        "-A",
+        "app.workers.celery_app:celery_app",
+        "worker",
+        "--loglevel=info",
+        "--pool=solo",
+      ]
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-docmind}:${POSTGRES_PASSWORD:-docmind_local}@postgres:5432/${POSTGRES_DB:-docmind}
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /app/storage/uploads
+    volumes:
+      - upload_data:/app/storage/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    profiles: ["app"]
+    build:
+      context: ./frontend
+    ports:
+      - "127.0.0.1:15173:80"
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   redis_data:
+  upload_data:

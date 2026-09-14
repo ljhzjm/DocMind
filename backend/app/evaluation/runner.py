@@ -19,7 +19,7 @@ from app.evaluation.types import (
 )
 from app.rag.answer import AnswerGenerator, RAGGenerationError
 from app.rag.rerank import RerankProvider, create_reranker
-from app.rag.types import RAGContext
+from app.rag.types import AnswerDeltaEvent, DoneEvent, RAGContext
 from app.retrieval.service import SearchService
 
 
@@ -78,7 +78,14 @@ class EvaluationRunner:
             ragas_faithfulness=(mean(ragas_faithfulness) if ragas_faithfulness else None),
             ragas_answer_relevance=(mean(ragas_relevance) if ragas_relevance else None),
             average_latency_ms=mean([result.latency_ms for result in results]),
+            average_first_token_latency_ms=mean(
+                [result.first_token_latency_ms for result in results]
+            ),
+            average_input_tokens=mean([result.input_tokens for result in results]),
+            average_output_tokens=mean([result.output_tokens for result in results]),
             average_estimated_cost=mean([result.estimated_cost for result in results]),
+            refusal_rate=mean([1.0 if result.refused else 0.0 for result in results]),
+            hallucination_risk=mean([self._hallucination_risk(result) for result in results]),
             cases=results,
         )
 
@@ -121,7 +128,11 @@ class EvaluationRunner:
                 ragas_faithfulness=None,
                 ragas_answer_relevance=None,
                 latency_ms=self._elapsed_ms(started_at),
+                first_token_latency_ms=0,
+                input_tokens=0,
+                output_tokens=0,
                 estimated_cost=0,
+                refused=True,
                 error="empty retrieval result",
             )
 
@@ -129,15 +140,26 @@ class EvaluationRunner:
             RAGContext(citation_number=index, hit=hit)
             for index, hit in enumerate(contexts, start=1)
         ]
+        generated_text = ""
+        first_token_latency_ms = 0.0
+        done_event: DoneEvent | None = None
         try:
-            generation = await self._answer_generator.generate_with_metadata(
+            async for event in self._answer_generator.stream(
                 case.question,
                 rag_contexts,
-            )
+            ):
+                if isinstance(event, AnswerDeltaEvent):
+                    if first_token_latency_ms == 0:
+                        first_token_latency_ms = self._elapsed_ms(started_at)
+                    generated_text += event.delta
+                elif isinstance(event, DoneEvent):
+                    done_event = event
+            if done_event is None:
+                raise RAGGenerationError("generation stream ended without completion")
             judge = await self._judge.score(
                 question=case.question,
                 reference_answer=case.reference_answer,
-                answer=generation.answer.answer,
+                answer=generated_text,
                 contexts=[hit.content for hit in contexts],
             )
         except (RAGGenerationError, JudgeFormatError) as exc:
@@ -150,7 +172,11 @@ class EvaluationRunner:
                 ragas_faithfulness=None,
                 ragas_answer_relevance=None,
                 latency_ms=self._elapsed_ms(started_at),
+                first_token_latency_ms=first_token_latency_ms,
+                input_tokens=0,
+                output_tokens=0,
                 estimated_cost=0,
+                refused=False,
                 error=str(exc),
             )
 
@@ -159,13 +185,14 @@ class EvaluationRunner:
         try:
             ragas_scores = await self._ragas.score(
                 question=case.question,
-                answer=generation.answer.answer,
+                answer=generated_text,
                 contexts=[hit.content for hit in contexts],
             )
         except RagasConfigurationError as exc:
             ragas_error = str(exc)
 
-        estimated_cost = generation.estimated_cost + judge.estimated_cost
+        estimated_cost = done_event.estimated_cost + judge.estimated_cost
+        refused = generated_text.strip() == "未找到相关资料"
         return CaseMetrics(
             question=case.question,
             recall_at_5=recall,
@@ -177,10 +204,20 @@ class EvaluationRunner:
                 ragas_scores.answer_relevance if ragas_scores is not None else None
             ),
             latency_ms=self._elapsed_ms(started_at),
+            first_token_latency_ms=first_token_latency_ms,
+            input_tokens=done_event.usage.input_tokens,
+            output_tokens=done_event.usage.output_tokens,
             estimated_cost=estimated_cost,
+            refused=refused,
             error=ragas_error,
         )
 
     @staticmethod
     def _elapsed_ms(started_at: float) -> float:
         return round((perf_counter() - started_at) * 1000, 3)
+
+    @staticmethod
+    def _hallucination_risk(result: CaseMetrics) -> float:
+        if result.ragas_faithfulness is not None:
+            return max(0.0, 1.0 - result.ragas_faithfulness)
+        return max(0.0, 1.0 - result.faithfulness / 5)

@@ -15,11 +15,20 @@ class UnsupportedDocumentTypeError(ValueError):
     """上传扩展名不属于解析器支持范围。"""
 
 
-def parse_document(path: Path) -> list[ParsedBlock]:
+def parse_document(
+    path: Path,
+    *,
+    ocr_enabled: bool = False,
+    ocr_language: str = "chi_sim+eng",
+) -> list[ParsedBlock]:
     """按扩展名选择解析器，并返回带结构元数据的文本块。"""
     suffix = path.suffix.lower()
     if suffix == ".pdf":
-        return parse_pdf(path)
+        return parse_pdf(
+            path,
+            ocr_enabled=ocr_enabled,
+            ocr_language=ocr_language,
+        )
     if suffix in {".md", ".markdown"}:
         return parse_markdown(path)
     if suffix not in _SUPPORTED_EXTENSIONS:
@@ -27,12 +36,26 @@ def parse_document(path: Path) -> list[ParsedBlock]:
     raise UnsupportedDocumentTypeError(f"unsupported document type: {suffix}")
 
 
-def parse_pdf(path: Path) -> list[ParsedBlock]:
+def parse_pdf(
+    path: Path,
+    *,
+    ocr_enabled: bool = False,
+    ocr_language: str = "chi_sim+eng",
+) -> list[ParsedBlock]:
     """逐页提取 PDF 文本，页码固定使用从 1 开始的物理页号。"""
     blocks: list[ParsedBlock] = []
     with pymupdf.open(path) as document:  # type: ignore[no-untyped-call]
         for page_number, page in enumerate(document, start=1):
             text = page.get_text("text").strip()
+            if not text and ocr_enabled:
+                text_page = page.get_textpage_ocr(
+                    language=ocr_language,
+                    dpi=200,
+                )
+                text = page.get_text("text", textpage=text_page).strip()
+            table_markdown = _extract_tables_as_markdown(page)
+            if table_markdown:
+                text = "\n\n".join(part for part in [text, table_markdown] if part)
             if text:
                 blocks.append(
                     ParsedBlock(
@@ -42,6 +65,30 @@ def parse_pdf(path: Path) -> list[ParsedBlock]:
                     )
                 )
     return blocks
+
+
+def _extract_tables_as_markdown(page: pymupdf.Page) -> str:
+    """将 PyMuPDF 识别到的表格转换为 Markdown，保留行列结构。"""
+    tables = page.find_tables()  # type: ignore[no-untyped-call]
+    markdown_tables: list[str] = []
+    for table in tables.tables:
+        rows = table.extract()
+        normalized = [
+            [str(cell or "").replace("\n", " ").strip() for cell in row] for row in rows if row
+        ]
+        if not normalized:
+            continue
+        header = normalized[0]
+        width = len(header)
+        lines = [
+            "| " + " | ".join(header) + " |",
+            "| " + " | ".join(["---"] * width) + " |",
+        ]
+        for row in normalized[1:]:
+            padded = row + [""] * max(0, width - len(row))
+            lines.append("| " + " | ".join(padded[:width]) + " |")
+        markdown_tables.append("\n".join(lines))
+    return "\n\n".join(markdown_tables)
 
 
 def parse_markdown(path: Path) -> list[ParsedBlock]:

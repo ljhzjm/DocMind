@@ -7,6 +7,7 @@ import type {
   DocumentItem,
   DocumentStatusResponse,
   DocumentUploadResponse,
+  EmbeddingTaskResponse,
 } from '../types/documents'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(
@@ -68,4 +69,27 @@ export function uploadDocument(
     }
     request.send(formData)
   })
+}
+export async function backfillDocumentEmbeddings(
+  documentId: string,
+): Promise<EmbeddingTaskResponse> {
+  const response = await fetch(`${DOCUMENTS_URL}/${documentId}/embeddings`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(`向量任务创建失败：${response.status}`)
+  }
+  return (await response.json()) as EmbeddingTaskResponse
+}
+
+export async function reprocessDocument(
+  documentId: string,
+): Promise<EmbeddingTaskResponse> {
+  const response = await fetch(`${DOCUMENTS_URL}/${documentId}/reprocess`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(`重新解析任务创建失败：${response.status}`)
+  }
+  return (await response.json()) as EmbeddingTaskResponse
 }

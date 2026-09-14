@@ -14,6 +14,9 @@ class EmbeddingProvider(ABC):
     async def embed_text(self, text: str) -> list[float]:
         raise NotImplementedError
 
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return [await self.embed_text(text) for text in texts]
+
 
 class LLMGatewayEmbeddingProvider(EmbeddingProvider):
     """默认通过 app.llm 路由调用 OpenAI 兼容 Embedding 接口。"""
@@ -22,8 +25,16 @@ class LLMGatewayEmbeddingProvider(EmbeddingProvider):
         self._router = router or create_default_router()
 
     async def embed_text(self, text: str) -> list[float]:
+        vectors = await self.embed_texts([text])
+        return vectors[0]
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
         route = self._router.resolve(LLMTask.EMBEDDING)
-        result = await route.provider.embed([text], task=LLMTask.EMBEDDING.value)
-        if not result.embeddings or len(result.embeddings[0]) != 1024:
-            raise EmbeddingError("embedding provider must return one 1024-dim vector")
-        return result.embeddings[0]
+        result = await route.provider.embed(texts, task=LLMTask.EMBEDDING.value)
+        if len(result.embeddings) != len(texts):
+            raise EmbeddingError("embedding provider returned an unexpected vector count")
+        if any(len(vector) != 1024 for vector in result.embeddings):
+            raise EmbeddingError("embedding provider must return 1024-dim vectors")
+        return result.embeddings

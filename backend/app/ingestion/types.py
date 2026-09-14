@@ -18,3 +18,6 @@ class ChunkDraft:
     chunk_index: int
     page_number: int | None
     heading_path: tuple[str, ...]
+    embedding: tuple[float, ...] | None = None
+    is_parent: bool = False
+    parent_index: int | None = None

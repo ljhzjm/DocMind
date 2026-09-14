@@ -13,6 +13,10 @@ const props = defineProps<{
   contexts: CitationContext[]
 }>()
 
+const emit = defineEmits<{
+  selectContext: [context: CitationContext]
+}>()
+
 interface TooltipState {
   context: CitationContext
   top: number
@@ -28,6 +32,23 @@ const renderedHtml = computed(() => {
   )
   return DOMPurify.sanitize(marked.parse(withCitationTags) as string)
 })
+
+function selectCitation(event: MouseEvent): void {
+  if (!(event.target instanceof HTMLElement)) {
+    return
+  }
+  const element = event.target.closest<HTMLElement>('.citation-ref')
+  if (element === null) {
+    return
+  }
+  const citationNumber = Number(element.dataset.citation)
+  const context = props.contexts.find(
+    (item) => item.citation_number === citationNumber,
+  )
+  if (context !== undefined) {
+    emit('selectContext', context)
+  }
+}
 
 function showCitation(event: MouseEvent): void {
   if (!(event.target instanceof HTMLElement)) {
@@ -57,6 +78,7 @@ function showCitation(event: MouseEvent): void {
   <!-- eslint-disable vue/no-v-html -- DOMPurify sanitizes Marked output. -->
   <div
     class="markdown-body"
+    @click="selectCitation"
     @mouseover="showCitation"
     @mouseleave="tooltip = null"
     v-html="renderedHtml"

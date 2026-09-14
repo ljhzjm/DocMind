@@ -19,6 +19,7 @@ class LLMTask(StrEnum):
     INTENT_CLASSIFICATION = "intent_classification"
     QUERY_REWRITE = "query_rewrite"
     FINAL_GENERATION = "final_generation"
+    RERANK = "rerank"
     EMBEDDING = "embedding"
     EVALUATION_JUDGE = "evaluation_judge"
 
@@ -114,6 +115,7 @@ def create_openai_provider(
         max_retries=provider_config.max_retries,
         retry_backoff_seconds=provider_config.retry_backoff_seconds,
         stream_include_usage=model_config.stream_include_usage,
+        response_format_json=model_config.response_format_json,
         default_headers=provider_config.default_headers,
     )
 

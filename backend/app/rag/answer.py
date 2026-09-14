@@ -165,6 +165,11 @@ class AnswerGenerator:
                     citations=answer.citations,
                     usage=stream_usage,
                     model_name=route.model_name,
+                    estimated_cost=calculate_token_cost(
+                        stream_usage,
+                        input_cost_per_million=route.input_cost_per_million,
+                        output_cost_per_million=route.output_cost_per_million,
+                    ),
                 )
                 return
             except (

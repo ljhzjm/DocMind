@@ -18,6 +18,7 @@ provider = "deepseek"
 fallbacks = ["cheap_backup"]
 model = "deepseek-chat"
 stream_include_usage = true
+response_format_json = true
 # 按供应商实际价格配置，单位：美元/百万 token。
 input_cost_per_million = 0.14
 output_cost_per_million = 0.57
@@ -27,6 +28,7 @@ provider = "deepseek"
 fallbacks = ["cheap_backup"]
 model = "deepseek-reasoner"
 stream_include_usage = true
+response_format_json = true
 input_cost_per_million = 0.0
 output_cost_per_million = 0.0
 
@@ -34,6 +36,7 @@ output_cost_per_million = 0.0
 provider = "qwen"
 model = "qwen-turbo"
 stream_include_usage = true
+response_format_json = true
 
 [models.embedding]
 provider = "qwen"
@@ -44,4 +47,5 @@ intent_classification = "cheap"
 query_rewrite = "cheap"
 final_generation = "strong"
 evaluation_judge = "cheap"
+rerank = "cheap"
 embedding = "embedding"

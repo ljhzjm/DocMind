@@ -9,6 +9,17 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { ChatStreamHandlers } from '../types/chat'
 
+vi.mock('../api/conversations', () => ({
+  fetchConversations: vi.fn(async () => []),
+  createConversation: vi.fn(async (title: string) => ({
+    id: 'conversation-test',
+    title,
+    created_at: '2026-09-14T00:00:00Z',
+    updated_at: '2026-09-14T00:00:00Z',
+  })),
+  fetchConversationMessages: vi.fn(async () => []),
+}))
+
 vi.mock('../api/chatStream', () => ({
   streamChat: vi.fn(
     async (

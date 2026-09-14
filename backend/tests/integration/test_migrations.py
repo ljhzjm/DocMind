@@ -48,9 +48,11 @@ def test_initial_migration_upgrade_and_downgrade(
             "documents",
             "chunks",
             "eval_dataset",
+            "evaluation_runs",
             "chunk_terms",
             "conversations",
             "messages",
+            "knowledge_base_revision",
             "usage_records",
         }.issubset(inspector.get_table_names())
 

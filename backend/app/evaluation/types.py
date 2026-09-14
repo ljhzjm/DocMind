@@ -31,7 +31,11 @@ class CaseMetrics:
     ragas_faithfulness: float | None
     ragas_answer_relevance: float | None
     latency_ms: float
+    first_token_latency_ms: float
+    input_tokens: int
+    output_tokens: int
     estimated_cost: float
+    refused: bool
     error: str | None = None
 
 
@@ -46,5 +50,10 @@ class ConfigMetrics:
     ragas_faithfulness: float | None
     ragas_answer_relevance: float | None
     average_latency_ms: float
+    average_first_token_latency_ms: float
+    average_input_tokens: float
+    average_output_tokens: float
     average_estimated_cost: float
+    refusal_rate: float
+    hallucination_risk: float
     cases: list[CaseMetrics] = field(default_factory=list)

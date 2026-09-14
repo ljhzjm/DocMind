@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,11 @@ from app.repositories.eval import (
     list_eval_cases,
     list_eval_dataset_summaries,
 )
+from app.repositories.evaluation_runs import (
+    create_evaluation_run,
+    get_evaluation_run,
+    list_evaluation_runs,
+)
 from app.schemas.evaluation import (
     CaseMetricsResponse,
     ConfigMetricsResponse,
@@ -21,6 +27,7 @@ from app.schemas.evaluation import (
     EvalDatasetSummary,
     EvalRunRequest,
     EvalRunResponse,
+    EvaluationRunSummary,
 )
 
 router = APIRouter(prefix="/eval", tags=["evaluation"])
@@ -103,9 +110,17 @@ async def run_evaluation(
         for config in request.configs
     ]
     results = await runner.run(session, cases=cases, configs=configs)
-    return EvalRunResponse(
+    response_results = [_config_response(result) for result in results]
+    run = await create_evaluation_run(
+        session,
         dataset_name=request.dataset_name,
-        results=[_config_response(result) for result in results],
+        configs=[config.model_dump(mode="json") for config in request.configs],
+        results=[result.model_dump(mode="json") for result in response_results],
+    )
+    return EvalRunResponse(
+        run_id=run.id,
+        dataset_name=request.dataset_name,
+        results=response_results,
     )
 
 
@@ -134,7 +149,12 @@ def _config_response(result: ConfigMetrics) -> ConfigMetricsResponse:
         ragas_faithfulness=result.ragas_faithfulness,
         ragas_answer_relevance=result.ragas_answer_relevance,
         average_latency_ms=result.average_latency_ms,
+        average_first_token_latency_ms=result.average_first_token_latency_ms,
+        average_input_tokens=result.average_input_tokens,
+        average_output_tokens=result.average_output_tokens,
         average_estimated_cost=result.average_estimated_cost,
+        refusal_rate=result.refusal_rate,
+        hallucination_risk=result.hallucination_risk,
         cases=[
             CaseMetricsResponse(
                 question=case.question,
@@ -145,9 +165,45 @@ def _config_response(result: ConfigMetrics) -> ConfigMetricsResponse:
                 ragas_faithfulness=case.ragas_faithfulness,
                 ragas_answer_relevance=case.ragas_answer_relevance,
                 latency_ms=case.latency_ms,
+                first_token_latency_ms=case.first_token_latency_ms,
+                input_tokens=case.input_tokens,
+                output_tokens=case.output_tokens,
                 estimated_cost=case.estimated_cost,
+                refused=case.refused,
                 error=case.error,
             )
             for case in result.cases
         ],
+    )
+
+
+@router.get("/runs", response_model=list[EvaluationRunSummary])
+async def get_evaluation_runs(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> list[EvaluationRunSummary]:
+    runs = await list_evaluation_runs(session)
+    return [
+        EvaluationRunSummary(
+            run_id=run.id,
+            dataset_name=run.dataset_name,
+            created_at=run.created_at.isoformat(),
+        )
+        for run in runs
+    ]
+
+
+@router.get("/runs/{run_id}", response_model=EvalRunResponse)
+async def get_evaluation_run_detail(
+    run_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EvalRunResponse:
+    run = await get_evaluation_run(session, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="evaluation run not found")
+    return EvalRunResponse.model_validate(
+        {
+            "run_id": run.id,
+            "dataset_name": run.dataset_name,
+            "results": run.results,
+        }
     )

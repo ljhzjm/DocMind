@@ -18,10 +18,15 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(
 )
 const CHAT_STREAM_URL = `${API_BASE_URL}/api/chat/stream`
 
+export interface ChatStreamOptions {
+  conversationId?: string
+}
+
 export async function streamChat(
   query: string,
   signal: AbortSignal,
   handlers: ChatStreamHandlers,
+  options: ChatStreamOptions = {},
 ): Promise<void> {
   const response = await fetch(CHAT_STREAM_URL, {
     method: 'POST',
@@ -29,7 +34,10 @@ export async function streamChat(
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({
+      query,
+      conversation_id: options.conversationId,
+    }),
     signal,
   })
 

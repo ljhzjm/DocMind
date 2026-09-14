@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.document import Chunk, Document
 from app.models.enums import DocumentStatus
 from app.retrieval.embedding import EmbeddingProvider
+from app.retrieval.parents import expand_parent_hits
 from app.retrieval.types import RetrievalHit
 
 
@@ -34,12 +35,13 @@ async def vector_search(
         .where(
             Document.status == DocumentStatus.READY,
             Chunk.embedding.is_not(None),
+            Chunk.is_parent.is_(False),
         )
         .order_by(distance)
         .limit(top_k)
     )
     rows = (await session.execute(statement)).mappings().all()
-    return [
+    hits = [
         RetrievalHit(
             chunk_id=cast(UUID, row["id"]),
             document_id=cast(UUID, row["document_id"]),
@@ -52,3 +54,4 @@ async def vector_search(
         )
         for row in rows
     ]
+    return await expand_parent_hits(session, hits)

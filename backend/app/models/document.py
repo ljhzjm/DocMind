@@ -92,6 +92,7 @@ class Chunk(Base):
         ),
         Index("ix_chunks_document_index", "document_id", "chunk_index"),
         Index("ix_chunks_parent_chunk_id", "parent_chunk_id"),
+        Index("ix_chunks_is_parent", "is_parent"),
         Index(
             "ix_chunks_heading_path_gin",
             "heading_path",
@@ -128,6 +129,10 @@ class Chunk(Base):
         UUID(as_uuid=True),
         ForeignKey("chunks.id", ondelete="CASCADE"),
         nullable=True,
+    )
+    is_parent: Mapped[bool] = mapped_column(
+        nullable=False,
+        server_default=text("false"),
     )
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
 

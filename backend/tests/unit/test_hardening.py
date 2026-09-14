@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator, Sequence
+from uuid import uuid4
 
 import pytest
 from app.cache.answer_cache import cache_key, normalize_query
@@ -15,11 +16,19 @@ from app.llm.base import (
     TokenUsage,
 )
 from app.llm.fallback import FallbackLLMProvider
+from app.rag.rerank import LLMRerankerProvider
+from app.retrieval.types import RetrievalHit
 
 
 class StaticProvider(LLMProvider):
-    def __init__(self, *, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        error: Exception | None = None,
+        response_text: str = "fallback-ok",
+    ) -> None:
         self.error = error
+        self.response_text = response_text
         self.calls = 0
 
     def chat_stream(
@@ -45,7 +54,7 @@ class StaticProvider(LLMProvider):
         if self.error is not None:
             raise self.error
         return ChatResult(
-            text="fallback-ok",
+            text=self.response_text,
             usage=TokenUsage(input_tokens=1, output_tokens=1, total_tokens=2),
             finish_reason="stop",
         )
@@ -127,6 +136,41 @@ async def test_token_bucket_returns_retry_after_when_limited() -> None:
     assert first.allowed is True
     assert second.allowed is False
     assert second.retry_after_seconds == 2
+
+
+@pytest.mark.asyncio
+async def test_llm_reranker_uses_api_scores() -> None:
+    provider = StaticProvider(
+        response_text=('{"results":[{"index":0,"score":0.2},{"index":1,"score":0.9}]}')
+    )
+    reranker = LLMRerankerProvider(provider=provider)
+    hits = [
+        RetrievalHit(
+            chunk_id=uuid4(),
+            document_id=uuid4(),
+            content="low relevance",
+            document_name="a.md",
+            page_number=1,
+            heading_path=(),
+            score=0.5,
+            sources=("bm25",),
+        ),
+        RetrievalHit(
+            chunk_id=uuid4(),
+            document_id=uuid4(),
+            content="high relevance",
+            document_name="b.md",
+            page_number=1,
+            heading_path=(),
+            score=0.5,
+            sources=("bm25",),
+        ),
+    ]
+
+    ranked = await reranker.rerank("question", hits, top_k=2)
+
+    assert [hit.document_name for hit in ranked] == ["b.md", "a.md"]
+    assert ranked[0].score == 0.9
 
 
 def test_json_log_formatter_injects_request_id() -> None:

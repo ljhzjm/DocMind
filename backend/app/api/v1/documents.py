@@ -29,8 +29,12 @@ from app.schemas.document import (
     DocumentListItem,
     DocumentStatusResponse,
     DocumentUploadResponse,
+    EmbeddingTaskResponse,
 )
-from app.workers.tasks import process_document_task
+from app.workers.tasks import (
+    backfill_document_embeddings_task,
+    process_document_task,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -167,3 +171,71 @@ async def get_chunks(
         )
         for chunk in chunks
     ]
+
+
+@router.post(
+    "/{document_id}/embeddings",
+    response_model=EmbeddingTaskResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def backfill_embeddings(
+    document_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EmbeddingTaskResponse:
+    """为历史文档重新生成缺失向量，并返回异步任务 ID。"""
+    document = await get_document(session, document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="document not found",
+        )
+    task_id = f"embedding-{document_id}"
+    try:
+        backfill_document_embeddings_task.apply_async(
+            args=[str(document_id)],
+            task_id=task_id,
+        )
+    except (CeleryError, OperationalError, OSError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="embedding task could not be queued",
+        ) from exc
+    return EmbeddingTaskResponse(
+        document_id=document_id,
+        task_id=task_id,
+        status=document.status,
+    )
+
+
+@router.post(
+    "/{document_id}/reprocess",
+    response_model=EmbeddingTaskResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def reprocess_document(
+    document_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EmbeddingTaskResponse:
+    """使用最新切片策略重新解析已上传文件。"""
+    document = await get_document(session, document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="document not found",
+        )
+    task_id = f"reprocess-{document_id}"
+    try:
+        process_document_task.apply_async(
+            args=[str(document_id)],
+            task_id=task_id,
+        )
+    except (CeleryError, OperationalError, OSError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="reprocess task could not be queued",
+        ) from exc
+    return EmbeddingTaskResponse(
+        document_id=document_id,
+        task_id=task_id,
+        status=document.status,
+    )

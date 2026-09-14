@@ -2,15 +2,21 @@
 <!-- Vue 概念：watch/nextTick 用于回答变化后自动滚动到最新内容。 -->
 <!-- Vue 概念：Pinia action 负责 send、stop 和切换会话，组件只触发事件。 -->
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
-import { ElButton, ElEmpty, ElInput, ElTag } from 'element-plus'
+import { nextTick, onMounted, ref, watch } from 'vue'
+import { ElButton, ElDrawer, ElEmpty, ElInput, ElTag } from 'element-plus'
 import { Plus, Send, Square, Trash2 } from 'lucide-vue-next'
 
 import MarkdownAnswer from '../components/MarkdownAnswer.vue'
+import type { CitationContext } from '../types/chat'
 import { useChatStore } from '../stores/chat'
 
 const chat = useChatStore()
 const scrollContainer = ref<HTMLElement | null>(null)
+const selectedCitation = ref<CitationContext | null>(null)
+
+onMounted(() => {
+  void chat.loadSessions()
+})
 
 watch(
   () => {
@@ -80,6 +86,7 @@ watch(
               v-if="message.role === 'assistant'"
               :content="message.content"
               :contexts="message.contexts"
+              @select-context="selectedCitation = $event"
             />
             <span v-else>{{ message.content }}</span>
             <p v-if="message.error" class="message-error">
@@ -129,6 +136,26 @@ watch(
         <ElButton v-else :icon="Square" @click="chat.stop">停止生成</ElButton>
       </form>
     </section>
+
+    <ElDrawer
+      :model-value="selectedCitation !== null"
+      title="引用片段"
+      size="min(40rem, 92vw)"
+      @close="selectedCitation = null"
+    >
+      <template v-if="selectedCitation">
+        <h3>{{ selectedCitation.document_name }}</h3>
+        <p>
+          {{
+            selectedCitation.page_number
+              ? `第 ${selectedCitation.page_number} 页`
+              : '未知页码'
+          }}
+          · {{ selectedCitation.heading_path.join(' > ') || '无标题路径' }}
+        </p>
+        <p class="citation-content">{{ selectedCitation.content }}</p>
+      </template>
+    </ElDrawer>
   </section>
 </template>
 
@@ -208,6 +235,11 @@ watch(
 
 .message-row.user .message-bubble {
   background: #e2efed;
+}
+
+.citation-content {
+  white-space: pre-wrap;
+  line-height: 1.75;
 }
 
 .message-tags {

@@ -66,3 +66,29 @@ def test_recursive_fallback_never_exceeds_chunk_size() -> None:
     assert max(len(chunk.content) for chunk in chunks) <= 512
     assert all(chunk.heading_path == ("Long section",) for chunk in chunks)
     assert [chunk.chunk_index for chunk in chunks] == list(range(len(chunks)))
+
+
+def test_parent_child_chunks_link_small_children_to_large_parent() -> None:
+    paragraph = "父子切片用于扩大生成上下文。" * 200
+    chunks = StructureAwareChunker(
+        chunk_size=512,
+        chunk_overlap=64,
+        parent_child_enabled=True,
+        parent_chunk_size=2048,
+    ).split(
+        [
+            ParsedBlock(
+                text=paragraph,
+                page_number=1,
+                heading_path=("Parent child",),
+            )
+        ]
+    )
+
+    parents = [chunk for chunk in chunks if chunk.is_parent]
+    children = [chunk for chunk in chunks if chunk.parent_index is not None]
+
+    assert parents
+    assert children
+    assert all(chunk.parent_index is not None for chunk in children)
+    assert all(len(child.content) <= 512 for child in children)
