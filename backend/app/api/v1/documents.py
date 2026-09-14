@@ -1,9 +1,11 @@
+import asyncio
+import logging
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
 
 from celery.exceptions import CeleryError
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from kombu.exceptions import OperationalError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +21,7 @@ from app.models.document import Document
 from app.models.enums import DocumentStatus
 from app.repositories.documents import (
     create_document,
+    delete_document,
     get_document,
     list_document_chunks,
     list_documents,
@@ -37,6 +40,7 @@ from app.workers.tasks import (
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -126,6 +130,31 @@ async def get_document_status(
         status=document.status,
         chunk_count=document.chunk_count,
     )
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_document(
+    document_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> Response:
+    """删除文档记录、切片、BM25 posting 和原始上传文件。"""
+    document = await get_document(session, document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="document not found",
+        )
+
+    source_path = get_settings().upload_dir / f"{document.id}.{document.file_type}"
+    await delete_document(session, document)
+    try:
+        await asyncio.to_thread(source_path.unlink, missing_ok=True)
+    except OSError:
+        logger.warning(
+            "uploaded file cleanup failed",
+            extra={"document_id": str(document_id), "path": str(source_path)},
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("", response_model=list[DocumentListItem])

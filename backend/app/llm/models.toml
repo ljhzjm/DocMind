@@ -41,11 +41,13 @@ response_format_json = true
 [models.embedding]
 provider = "qwen"
 model = "text-embedding-v3"
+max_batch_size = 10
 
 [routes]
 intent_classification = "cheap"
 query_rewrite = "cheap"
 final_generation = "strong"
+eval_data_generation = "cheap"
 evaluation_judge = "cheap"
 rerank = "cheap"
 embedding = "embedding"

@@ -9,6 +9,7 @@ from app.ingestion.types import ChunkDraft
 from app.models.chunk_term import ChunkTerm
 from app.models.document import Chunk, Document
 from app.models.enums import DocumentStatus
+from app.repositories.knowledge_base import bump_knowledge_base_revision
 from app.retrieval.tokenization import term_frequencies
 
 
@@ -30,6 +31,13 @@ async def set_document_status(
 ) -> None:
     document.status = status
     await session.commit()
+
+
+async def delete_document(session: AsyncSession, document: Document) -> None:
+    """删除文档并触发切片级联，同时让旧答案缓存失效。"""
+    await session.delete(document)
+    await session.flush()
+    await bump_knowledge_base_revision(session)
 
 
 def get_document_sync(session: Session, document_id: UUID) -> Document | None:

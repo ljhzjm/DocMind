@@ -32,9 +32,14 @@ class LLMGatewayEmbeddingProvider(EmbeddingProvider):
         if not texts:
             return []
         route = self._router.resolve(LLMTask.EMBEDDING)
-        result = await route.provider.embed(texts, task=LLMTask.EMBEDDING.value)
-        if len(result.embeddings) != len(texts):
-            raise EmbeddingError("embedding provider returned an unexpected vector count")
-        if any(len(vector) != 1024 for vector in result.embeddings):
-            raise EmbeddingError("embedding provider must return 1024-dim vectors")
-        return result.embeddings
+        batch_size = route.max_batch_size or len(texts)
+        embeddings: list[list[float]] = []
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            result = await route.provider.embed(batch, task=LLMTask.EMBEDDING.value)
+            if len(result.embeddings) != len(batch):
+                raise EmbeddingError("embedding provider returned an unexpected vector count")
+            if any(len(vector) != 1024 for vector in result.embeddings):
+                raise EmbeddingError("embedding provider must return 1024-dim vectors")
+            embeddings.extend(result.embeddings)
+        return embeddings

@@ -10,6 +10,7 @@ import {
   fetchDocuments,
   backfillDocumentEmbeddings,
   fetchDocumentStatus,
+  removeDocument,
   reprocessDocument,
   uploadDocument,
 } from '../api/documents'
@@ -27,6 +28,7 @@ export const useDocumentsStore = defineStore('documents', () => {
   const selectedDocument = ref<DocumentItem | null>(null)
   const loading = ref(false)
   const uploading = ref(false)
+  const deletingDocumentId = ref<string | null>(null)
   const uploadProgress = ref(0)
   const errorMessage = ref('')
   let pollingTimer: ReturnType<typeof setInterval> | null = null
@@ -90,6 +92,25 @@ export const useDocumentsStore = defineStore('documents', () => {
     }
   }
 
+  async function deleteDocument(document: DocumentItem): Promise<void> {
+    deletingDocumentId.value = document.document_id
+    errorMessage.value = ''
+    try {
+      await removeDocument(document.document_id)
+      documents.value = documents.value.filter(
+        (item) => item.document_id !== document.document_id,
+      )
+      if (selectedDocument.value?.document_id === document.document_id) {
+        closeChunks()
+      }
+      syncPolling()
+    } catch (error: unknown) {
+      errorMessage.value = error instanceof Error ? error.message : '删除失败'
+    } finally {
+      deletingDocumentId.value = null
+    }
+  }
+
   async function reprocess(document: DocumentItem): Promise<void> {
     errorMessage.value = ''
     try {
@@ -118,7 +139,11 @@ export const useDocumentsStore = defineStore('documents', () => {
   }
 
   function syncPolling(): void {
-    if (!hasActiveDocuments.value || pollingTimer !== null) {
+    if (!hasActiveDocuments.value) {
+      stopPolling()
+      return
+    }
+    if (pollingTimer !== null) {
       return
     }
     pollingTimer = setInterval(() => {
@@ -139,6 +164,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     selectedDocument,
     loading,
     uploading,
+    deletingDocumentId,
     uploadProgress,
     errorMessage,
     hasActiveDocuments,
@@ -147,6 +173,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     openChunks,
     closeChunks,
     rebuildEmbeddings,
+    deleteDocument,
     reprocess,
     stopPolling,
   }

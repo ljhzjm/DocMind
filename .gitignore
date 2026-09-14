@@ -27,3 +27,6 @@ Thumbs.db
 
 # Local uploaded documents
 backend/storage/
+
+# Generated eval data requires manual review before import.
+scripts/eval_data/

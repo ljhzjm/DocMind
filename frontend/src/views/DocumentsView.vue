@@ -6,6 +6,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import {
   ElButton,
   ElDrawer,
+  ElMessageBox,
   ElProgress,
   ElTable,
   ElTableColumn,
@@ -16,6 +17,7 @@ import {
   RefreshCw,
   RefreshCcw,
   RotateCcw,
+  Trash2,
   Upload,
 } from 'lucide-vue-next'
 
@@ -102,6 +104,24 @@ function rebuildDocumentEmbeddings(row: unknown): void {
 function reprocessDocumentRow(row: unknown): void {
   void documents.reprocess(asDocument(row))
 }
+
+async function deleteDocumentRow(row: unknown): Promise<void> {
+  const document = asDocument(row)
+  try {
+    await ElMessageBox.confirm(
+      `删除“${document.filename}”后，切片和向量也会一并清除。`,
+      '确认删除文档',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch {
+    return
+  }
+  await documents.deleteDocument(document)
+}
 </script>
 
 <template>
@@ -160,7 +180,7 @@ function reprocessDocumentRow(row: unknown): void {
       <ElTableColumn label="上传时间" min-width="180">
         <template #default="{ row }">{{ documentDate(row) }}</template>
       </ElTableColumn>
-      <ElTableColumn label="操作" width="310" fixed="right">
+      <ElTableColumn label="操作" width="390" fixed="right">
         <template #default="{ row }">
           <ElButton
             text
@@ -186,6 +206,16 @@ function reprocessDocumentRow(row: unknown): void {
             @click="reprocessDocumentRow(row)"
           >
             重新解析
+          </ElButton>
+          <ElButton
+            text
+            type="danger"
+            :icon="Trash2"
+            :loading="documents.deletingDocumentId === row.document_id"
+            :disabled="row.status === 'parsing'"
+            @click="deleteDocumentRow(row)"
+          >
+            删除
           </ElButton>
         </template>
       </ElTableColumn>

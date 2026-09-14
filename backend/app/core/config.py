@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = 64
     parent_child_enabled: bool = True
     parent_chunk_size: int = 2048
-    embedding_batch_size: int = 16
+    embedding_batch_size: int = 10
     ocr_enabled: bool = False
     ocr_language: str = "chi_sim+eng"
     retrieval_top_k: int = 10

@@ -44,6 +44,15 @@ export async function fetchDocumentChunks(
   return (await response.json()) as DocumentChunk[]
 }
 
+export async function removeDocument(documentId: string): Promise<void> {
+  const response = await fetch(`${DOCUMENTS_URL}/${documentId}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    throw new Error(`删除文档失败：${response.status}`)
+  }
+}
+
 export function uploadDocument(
   file: File,
   onProgress: (percent: number) => void,

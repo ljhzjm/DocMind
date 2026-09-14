@@ -1,0 +1,48 @@
+你是企业 RAG 评测集标注助手。请根据给定证据生成 1 条高质量中文评测样本。
+
+目标题型：{{ question_type }}
+
+题型约束：
+- factual：事实查询，答案必须能由证据直接支持。
+- numeric：数字查询，问题和答案必须围绕证据中的明确数字、日期、比例或金额。
+- multi_document：多文档对比，必须综合至少两个不同文档中的证据。
+- out_of_kb：知识库外负样本。问题应与企业知识库场景相关，但答案不能从任何证据推导出来。
+
+生成规则：
+1. 只输出一个 JSON 对象，不要输出 Markdown 或解释。
+2. question 必须具体、自然、只问一个问题，不能包含答案。
+3. reference_answer 必须完整、可独立阅读，不得编造证据之外的信息。
+4. 正样本用 evidence_indexes 返回实际支持的证据编号，至少 1 个。
+5. multi_document 至少引用两个不同文档的证据。
+6. out_of_kb 必须返回空数组 evidence_indexes，reference_answer 必须严格等于
+   "{{ negative_reference_answer }}"。
+7. 不要生成与已有问题语义重复的样本。
+{% if validation_error %}
+8. 上次输出未通过校验：{{ validation_error }}。请修正并重新输出完整 JSON。
+{% endif %}
+
+已有问题：
+{% if existing_questions %}
+{% for question in existing_questions %}
+- {{ question }}
+{% endfor %}
+{% else %}
+- 无
+{% endif %}
+
+可用证据：
+{% for item in evidence %}
+[{{ item.index }}]
+文档：{{ item.document_name }}
+页码：{{ item.page_number if item.page_number is not none else "未知" }}
+标题路径：{{ item.heading_path or "无" }}
+内容：
+{{ item.content }}
+{% endfor %}
+
+输出格式：
+{
+  "question": "问题",
+  "reference_answer": "参考答案",
+  "evidence_indexes": [1]
+}

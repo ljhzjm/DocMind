@@ -19,6 +19,7 @@ class LLMTask(StrEnum):
     INTENT_CLASSIFICATION = "intent_classification"
     QUERY_REWRITE = "query_rewrite"
     FINAL_GENERATION = "final_generation"
+    EVAL_DATA_GENERATION = "eval_data_generation"
     RERANK = "rerank"
     EMBEDDING = "embedding"
     EVALUATION_JUDGE = "evaluation_judge"
@@ -39,6 +40,7 @@ class RoutedModel:
     input_cost_per_million: float
     output_cost_per_million: float
     provider: LLMProvider
+    max_batch_size: int | None = None
 
 
 class LLMRouter:
@@ -91,6 +93,7 @@ class LLMRouter:
             input_cost_per_million=model_config.input_cost_per_million,
             output_cost_per_million=model_config.output_cost_per_million,
             provider=provider,
+            max_batch_size=model_config.max_batch_size,
         )
 
 
