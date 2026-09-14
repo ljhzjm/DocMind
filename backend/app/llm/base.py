@@ -69,6 +69,10 @@ class LLMError(Exception):
     """Base class for gateway failures safe to handle at the service boundary."""
 
 
+class LLMConfigurationError(LLMError):
+    """Raised when a configured model route cannot be constructed."""
+
+
 class LLMHTTPError(LLMError):
     def __init__(self, status_code: int, request_id: str | None = None) -> None:
         super().__init__(f"LLM provider returned HTTP {status_code}")

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     app_name: str = "DocMind API"
     app_env: Literal["development", "test", "staging", "production"] = "development"
     database_url: str = ""
+    llm_config_path: str = ""
     redis_url: str = ""
 
     model_config = SettingsConfigDict(
