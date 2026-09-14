@@ -47,6 +47,7 @@ def test_initial_migration_upgrade_and_downgrade(
             "alembic_version",
             "documents",
             "chunks",
+            "chunk_terms",
             "conversations",
             "messages",
             "usage_records",

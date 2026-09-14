@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.ingestion.types import ChunkDraft
+from app.models.chunk_term import ChunkTerm
 from app.models.document import Chunk, Document
 from app.models.enums import DocumentStatus
+from app.retrieval.tokenization import term_frequencies
 
 
 async def create_document(session: AsyncSession, document: Document) -> Document:
@@ -50,19 +52,33 @@ def replace_chunks(
 ) -> int:
     """幂等替换文档切片，重新解析不会留下旧版本数据。"""
     session.execute(delete(Chunk).where(Chunk.document_id == document.id))
-    session.add_all(
-        [
-            Chunk(
-                document_id=document.id,
-                content=draft.content,
-                chunk_index=draft.chunk_index,
-                page_number=draft.page_number,
-                heading_path=list(draft.heading_path),
-                parent_chunk_id=None,
-                embedding=None,
-            )
-            for draft in drafts
-        ]
-    )
+    chunks = [
+        Chunk(
+            document_id=document.id,
+            content=draft.content,
+            chunk_index=draft.chunk_index,
+            page_number=draft.page_number,
+            heading_path=list(draft.heading_path),
+            parent_chunk_id=None,
+            embedding=None,
+        )
+        for draft in drafts
+    ]
+    session.add_all(chunks)
+    session.flush()
+
+    # BM25 倒排索引与切片在同一事务写入；删除旧 chunks 时数据库级联清理旧 postings。
+    for chunk in chunks:
+        session.add_all(
+            [
+                ChunkTerm(
+                    term=term,
+                    chunk_id=chunk.id,
+                    term_frequency=frequency,
+                )
+                for term, frequency in term_frequencies(chunk.content).items()
+            ]
+        )
+
     document.chunk_count = len(drafts)
     return len(drafts)

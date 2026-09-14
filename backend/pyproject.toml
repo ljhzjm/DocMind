@@ -9,6 +9,7 @@ dependencies = [
     "celery[redis]>=5.4,<6.0",
     "fastapi>=0.115,<1.0",
     "httpx>=0.28,<1.0",
+    "jieba>=0.42,<1.0",
     "langchain-text-splitters>=0.3,<2.0",
     "pgvector>=0.3,<1.0",
     "psycopg[binary]>=3.2,<4.0",
@@ -74,3 +75,7 @@ disallow_untyped_decorators = false
 module = ["pymupdf", "pymupdf.*"]
 ignore_missing_imports = true
 disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+module = ["jieba", "jieba.*"]
+ignore_missing_imports = true

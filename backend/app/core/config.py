@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     allowed_upload_extensions: str = ".pdf,.md,.markdown"
     chunk_size: int = 512
     chunk_overlap: int = 64
+    retrieval_top_k: int = 10
     celery_broker_url: str = ""
     celery_result_backend: str = ""
 
@@ -41,6 +42,8 @@ class Settings(BaseSettings):
             raise ValueError("chunk_size must be positive")
         if self.chunk_overlap < 0 or self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be between 0 and chunk_size")
+        if self.retrieval_top_k <= 0:
+            raise ValueError("retrieval_top_k must be positive")
         if self.max_upload_size_bytes <= 0:
             raise ValueError("max_upload_size_bytes must be positive")
         return self
