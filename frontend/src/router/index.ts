@@ -6,6 +6,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import ChatView from '../views/ChatView.vue'
 import DocumentsView from '../views/DocumentsView.vue'
+import EvaluationView from '../views/EvaluationView.vue'
 import SearchDebugView from '../views/SearchDebugView.vue'
 
 export const router = createRouter({
@@ -15,5 +16,6 @@ export const router = createRouter({
     { path: '/chat', name: 'chat', component: ChatView },
     { path: '/documents', name: 'documents', component: DocumentsView },
     { path: '/search', name: 'search-debug', component: SearchDebugView },
+    { path: '/evaluation', name: 'evaluation', component: EvaluationView },
   ],
 })

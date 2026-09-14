@@ -2,7 +2,12 @@
 <!-- Vue 概念：RouterLink 负责声明式导航，并自动提供 active 状态。 -->
 <!-- Vue 概念：根组件提供全局框架，页面组件只关注各自业务。 -->
 <script setup lang="ts">
-import { FileStack, MessageSquareText, Search } from 'lucide-vue-next'
+import {
+  FileStack,
+  FlaskConical,
+  MessageSquareText,
+  Search,
+} from 'lucide-vue-next'
 </script>
 
 <template>
@@ -24,6 +29,10 @@ import { FileStack, MessageSquareText, Search } from 'lucide-vue-next'
         <RouterLink to="/search">
           <Search :size="17" />
           检索调试
+        </RouterLink>
+        <RouterLink to="/evaluation">
+          <FlaskConical :size="17" />
+          评测
         </RouterLink>
       </nav>
     </header>

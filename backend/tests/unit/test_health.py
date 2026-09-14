@@ -6,4 +6,5 @@ def test_health_endpoint() -> None:
     response = TestClient(app).get("/health")
 
     assert response.status_code == 200
+    assert response.headers["X-Request-ID"]
     assert response.json() == {"status": "ok", "service": "DocMind API"}

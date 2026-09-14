@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field
 
+from app.llm.base import TokenUsage
 from app.retrieval.types import RetrievalHit
 
 
@@ -27,6 +28,8 @@ class RetrievalEvent:
     latency_ms: float
     chunk_count: int
     contexts: tuple[RAGContext, ...] = ()
+    trace_id: str | None = None
+    cached: bool = False
 
 
 @dataclass(frozen=True)
@@ -37,11 +40,23 @@ class AnswerDeltaEvent:
 @dataclass(frozen=True)
 class DoneEvent:
     citations: list[int]
+    trace_id: str | None = None
+    usage: TokenUsage = field(default_factory=TokenUsage)
+    model_name: str = ""
 
 
 @dataclass(frozen=True)
 class ErrorEvent:
     message: str
+    trace_id: str | None = None
 
 
 RAGStreamEvent = RetrievalEvent | AnswerDeltaEvent | DoneEvent | ErrorEvent
+
+
+@dataclass(frozen=True)
+class GenerationOutcome:
+    answer: RAGAnswer
+    usage: TokenUsage
+    model_name: str
+    estimated_cost: float

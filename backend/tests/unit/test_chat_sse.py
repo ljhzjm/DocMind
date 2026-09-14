@@ -14,8 +14,9 @@ class FakePipeline:
         query: str,
         *,
         top_k: int | None = None,
+        trace_id: str | None = None,
     ) -> AsyncIterator[RetrievalEvent | AnswerDeltaEvent | DoneEvent]:
-        del session, query, top_k
+        del session, query, top_k, trace_id
         yield RetrievalEvent(latency_ms=12.5, chunk_count=2)
         yield AnswerDeltaEvent(delta="answer ")
         yield AnswerDeltaEvent(delta="[1]")

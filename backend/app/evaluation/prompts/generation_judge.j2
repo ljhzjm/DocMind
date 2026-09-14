@@ -1,0 +1,23 @@
+你是严格的 RAG 答案评审。请依据参考标准和检索片段评分，只输出 JSON。
+输出结构：
+{"faithfulness":1,"answer_relevance":1,"faithfulness_reason":"...","relevance_reason":"..."}
+
+{% include "judge_rubric.md" %}
+
+用户问题：
+{{ question }}
+
+参考答案：
+{{ reference_answer }}
+
+待评回答：
+{{ answer }}
+
+检索片段：
+{% for context in contexts %}
+[{{ loop.index }}] {{ context }}
+{% endfor %}
+{% if validation_error %}
+上一次输出不合法：{{ validation_error }}
+请重新输出合法 JSON，分数必须是 1 到 5 的整数。
+{% endif %}

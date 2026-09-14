@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.db.session import get_async_session
 from app.llm.base import LLMConfigurationError
+from app.observability.trace import TraceRecorder
+from app.repositories.usage import list_usage_records
 from app.retrieval.debug import SearchDebugService, SearchStepTrace
 from app.retrieval.embedding import EmbeddingError
 from app.retrieval.service import SearchService
@@ -16,6 +18,8 @@ from app.schemas.search import (
     SearchResponse,
     SearchResultResponse,
     StepResultsResponse,
+    TraceReplayResponse,
+    UsageRecordResponse,
 )
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -113,5 +117,30 @@ def _step_response(step: SearchStepTrace) -> StepResultsResponse:
                 sources=list(hit.sources),
             )
             for hit in step.results
+        ],
+    )
+
+
+@router.get("/trace/{trace_id}", response_model=TraceReplayResponse)
+async def replay_trace(
+    trace_id: str,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> TraceReplayResponse:
+    """按 trace_id 回放缓存快照和每个 RAG 环节的用量记录。"""
+    records = await list_usage_records(session, trace_id)
+    snapshot = await TraceRecorder().get_snapshot(trace_id)
+    return TraceReplayResponse(
+        trace_id=trace_id,
+        snapshot=snapshot,
+        usage_records=[
+            UsageRecordResponse(
+                step=record.step.value,
+                model=record.model,
+                input_tokens=record.input_tokens,
+                output_tokens=record.output_tokens,
+                latency_ms=record.latency_ms,
+                created_at=record.created_at.isoformat(),
+            )
+            for record in records
         ],
     )

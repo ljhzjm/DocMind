@@ -17,6 +17,8 @@ export interface RetrievalEvent {
   latency_ms: number
   chunk_count: number
   contexts: CitationContext[]
+  trace_id: string | null
+  cached: boolean
 }
 
 export interface AnswerEvent {
@@ -27,6 +29,13 @@ export interface AnswerEvent {
 export interface DoneEvent {
   type: 'done'
   citations: number[]
+  trace_id: string | null
+  model: string
+  usage: {
+    input_tokens: number
+    output_tokens: number
+    total_tokens: number
+  }
 }
 
 export interface ErrorEvent {
@@ -52,6 +61,8 @@ export interface ChatMessage {
   contexts: CitationContext[]
   error: string
   streaming: boolean
+  traceId: string | null
+  cached: boolean
 }
 
 export interface ChatSession {

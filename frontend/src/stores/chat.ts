@@ -32,6 +32,8 @@ function createAssistantMessage(): ChatMessage {
     contexts: [],
     error: '',
     streaming: true,
+    traceId: null,
+    cached: false,
   }
 }
 
@@ -169,6 +171,8 @@ export const useChatStore = defineStore('chat', () => {
       contexts: [],
       error: '',
       streaming: false,
+      traceId: null,
+      cached: false,
     })
     session.messages.push(createAssistantMessage())
     const assistant = session.messages[session.messages.length - 1]
@@ -194,12 +198,15 @@ export const useChatStore = defineStore('chat', () => {
       await streamChat(currentQuery, activeController.signal, {
         onRetrieval(event) {
           assistant.contexts = event.contexts
+          assistant.traceId = event.trace_id
+          assistant.cached = event.cached
           retrievalSummary.value = `检索完成：${event.chunk_count} 个片段，${event.latency_ms.toFixed(1)} ms`
         },
         onAnswer(event) {
           renderer.push(event.delta)
         },
         onDone(event) {
+          assistant.traceId = event.trace_id
           renderer.complete(event.citations)
         },
         onError(event) {

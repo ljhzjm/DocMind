@@ -92,13 +92,21 @@ export function parseSSEBlock(block: string): ChatStreamEvent | null {
       latency_ms: requireNumber(rawData, 'latency_ms'),
       chunk_count: requireNumber(rawData, 'chunk_count'),
       contexts: requireCitationContexts(rawData),
+      trace_id: requireOptionalString(rawData, 'trace_id'),
+      cached: requireBoolean(rawData, 'cached'),
     }
   }
   if (eventName === 'answer') {
     return { type: 'answer', delta: requireString(rawData, 'delta') }
   }
   if (eventName === 'done') {
-    return { type: 'done', citations: requireNumberArray(rawData, 'citations') }
+    return {
+      type: 'done',
+      citations: requireNumberArray(rawData, 'citations'),
+      trace_id: requireOptionalString(rawData, 'trace_id'),
+      model: requireOptionalString(rawData, 'model') ?? '',
+      usage: requireUsage(rawData),
+    }
   }
   if (eventName === 'error') {
     return { type: 'error', message: requireString(rawData, 'message') }
@@ -142,6 +150,40 @@ function requireNumber(record: Record<string, unknown>, key: string): number {
     throw new Error(`SSE field '${key}' must be a number`)
   }
   return value
+}
+
+function requireOptionalString(
+  record: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = record[key]
+  if (value === null || value === undefined) {
+    return null
+  }
+  if (typeof value !== 'string') {
+    throw new Error(`SSE field '${key}' must be a string`)
+  }
+  return value
+}
+
+function requireBoolean(record: Record<string, unknown>, key: string): boolean {
+  const value = record[key]
+  if (typeof value !== 'boolean') {
+    return false
+  }
+  return value
+}
+
+function requireUsage(record: Record<string, unknown>): DoneEvent['usage'] {
+  const value = record.usage
+  if (!isRecord(value)) {
+    return { input_tokens: 0, output_tokens: 0, total_tokens: 0 }
+  }
+  return {
+    input_tokens: requireNumber(value, 'input_tokens'),
+    output_tokens: requireNumber(value, 'output_tokens'),
+    total_tokens: requireNumber(value, 'total_tokens'),
+  }
 }
 
 function requireCitationContexts(

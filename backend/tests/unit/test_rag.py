@@ -3,6 +3,7 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
+from app.cache.answer_cache import AnswerCache, CachedAnswer
 from app.core.config import Settings
 from app.llm.base import (
     ChatResult,
@@ -14,6 +15,8 @@ from app.llm.base import (
     TextDeltaEvent,
     TokenUsage,
 )
+from app.models.enums import UsageStep
+from app.observability.trace import TraceRecorder
 from app.rag.answer import (
     AnswerGenerator,
     RAGGenerationError,
@@ -33,6 +36,7 @@ from app.rag.types import (
 from app.retrieval.service import SearchService
 from app.retrieval.types import RetrievalHit, SearchMode
 from pydantic import ValidationError
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -75,6 +79,46 @@ class StubLLMProvider(LLMProvider):
         task: str | None = None,
     ) -> EmbeddingResult:
         raise NotImplementedError
+
+
+class NoopTraceRecorder(TraceRecorder):
+    async def record(
+        self,
+        session: AsyncSession,
+        *,
+        trace_id: str,
+        step: UsageStep,
+        model: str,
+        latency_ms: float,
+        usage: TokenUsage | None = None,
+    ) -> None:
+        del session, trace_id, step, model, latency_ms, usage
+
+    async def store_snapshot(
+        self,
+        trace_id: str,
+        payload: dict[str, object],
+        *,
+        redis: Redis | None = None,
+    ) -> None:
+        del trace_id, payload, redis
+
+
+class EmptyAnswerCache(AnswerCache):
+    def __init__(self) -> None:
+        pass
+
+    async def get(self, key: str) -> CachedAnswer | None:
+        del key
+        return None
+
+    async def set(self, key: str, answer: CachedAnswer) -> None:
+        del key, answer
+
+
+async def fake_version_provider(session: object) -> str:
+    del session
+    return "test-version"
 
 
 def context() -> RAGContext:
@@ -201,14 +245,18 @@ async def test_pipeline_refuses_low_score_without_generation() -> None:
         query_rewriter=FixedQueryRewriter(),
         reranker=PassthroughReranker(),
         answer_generator=generator,
+        answer_cache=EmptyAnswerCache(),
+        trace_recorder=NoopTraceRecorder(),
+        knowledge_base_version_provider=fake_version_provider,
     )
 
     events = [event async for event in pipeline.stream(cast(AsyncSession, object()), "question")]
     answer = "".join(event.delta for event in events if isinstance(event, AnswerDeltaEvent))
+    done_event = next(event for event in events if isinstance(event, DoneEvent))
 
     assert isinstance(events[0], RetrievalEvent)
     assert answer == "未找到相关资料"
-    assert isinstance(events[-1], DoneEvent)
+    assert done_event.citations == []
     assert generator.calls == 0
 
 
@@ -251,6 +299,7 @@ async def test_answer_generator_streams_only_after_valid_citations() -> None:
     ]
     deltas = [event.delta for event in events if isinstance(event, AnswerDeltaEvent)]
 
+    done_event = next(event for event in events if isinstance(event, DoneEvent))
     assert provider.calls == 2
     assert "".join(deltas) == "合法 [1]"
-    assert events[-1] == DoneEvent(citations=[1])
+    assert done_event.citations == [1]

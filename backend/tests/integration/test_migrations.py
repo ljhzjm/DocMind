@@ -47,6 +47,7 @@ def test_initial_migration_upgrade_and_downgrade(
             "alembic_version",
             "documents",
             "chunks",
+            "eval_dataset",
             "chunk_terms",
             "conversations",
             "messages",
@@ -85,6 +86,17 @@ def test_initial_migration_upgrade_and_downgrade(
                     """
                 )
             )
+            usage_steps = connection.scalars(
+                text(
+                    """
+                    SELECT enumlabel
+                    FROM pg_enum
+                    JOIN pg_type ON pg_type.oid = pg_enum.enumtypid
+                    WHERE pg_type.typname = 'usage_step'
+                    ORDER BY enumsortorder
+                    """
+                )
+            ).all()
             document_statuses = connection.scalars(
                 text(
                     """
@@ -103,6 +115,7 @@ def test_initial_migration_upgrade_and_downgrade(
         assert "USING hnsw" in hnsw_definition
         assert "vector_cosine_ops" in hnsw_definition
         assert document_statuses == ["uploaded", "parsing", "ready", "failed"]
+        assert usage_steps == ["rewrite", "retrieve", "rerank", "generate"]
 
         command.downgrade(config, "base")
         assert "documents" not in inspect(engine).get_table_names()

@@ -15,12 +15,24 @@ retry_backoff_seconds = 0.5
 
 [models.cheap]
 provider = "deepseek"
+fallbacks = ["cheap_backup"]
 model = "deepseek-chat"
 stream_include_usage = true
+# 按供应商实际价格配置，单位：美元/百万 token。
+input_cost_per_million = 0.14
+output_cost_per_million = 0.57
 
 [models.strong]
 provider = "deepseek"
+fallbacks = ["cheap_backup"]
 model = "deepseek-reasoner"
+stream_include_usage = true
+input_cost_per_million = 0.0
+output_cost_per_million = 0.0
+
+[models.cheap_backup]
+provider = "qwen"
+model = "qwen-turbo"
 stream_include_usage = true
 
 [models.embedding]
@@ -31,4 +43,5 @@ model = "text-embedding-v3"
 intent_classification = "cheap"
 query_rewrite = "cheap"
 final_generation = "strong"
+evaluation_judge = "cheap"
 embedding = "embedding"

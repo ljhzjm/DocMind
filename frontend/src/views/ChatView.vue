@@ -85,13 +85,21 @@ watch(
             <p v-if="message.error" class="message-error">
               {{ message.error }}
             </p>
-            <ElTag
-              v-if="message.role === 'assistant' && message.citations.length"
-              size="small"
-              type="success"
-            >
-              引用：{{ message.citations.join(', ') }}
-            </ElTag>
+            <div class="message-tags">
+              <ElTag v-if="message.cached" size="small" type="warning"
+                >缓存命中</ElTag
+              >
+              <ElTag
+                v-if="message.role === 'assistant' && message.citations.length"
+                size="small"
+                type="success"
+              >
+                引用：{{ message.citations.join(', ') }}
+              </ElTag>
+              <code v-if="message.traceId"
+                >trace: {{ message.traceId.slice(0, 12) }}</code
+              >
+            </div>
           </div>
         </article>
       </div>
@@ -200,6 +208,19 @@ watch(
 
 .message-row.user .message-bubble {
   background: #e2efed;
+}
+
+.message-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+code {
+  color: #6b7f84;
+  font-size: 0.72rem;
 }
 
 .message-error {

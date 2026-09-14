@@ -61,3 +61,15 @@ def usage_from_counts(
 
 def resolve_request_id(request_id: str | None) -> str:
     return request_id or uuid4().hex
+
+
+def calculate_token_cost(
+    usage: TokenUsage,
+    *,
+    input_cost_per_million: float,
+    output_cost_per_million: float,
+) -> float:
+    """按百万 token 单价估算调用成本，单位与配置一致。"""
+    return (
+        usage.input_tokens * input_cost_per_million + usage.output_tokens * output_cost_per_million
+    ) / 1_000_000

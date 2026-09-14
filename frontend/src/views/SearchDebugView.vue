@@ -13,14 +13,35 @@ import {
 import { Play, Search } from 'lucide-vue-next'
 
 import SearchStepCard from '../components/SearchStepCard.vue'
-import { fetchSearchDebug } from '../api/search'
-import type { SearchDebugTrace } from '../types/search'
+import { fetchSearchDebug, fetchTraceReplay } from '../api/search'
+import type { SearchDebugTrace, TraceReplay } from '../types/search'
 
 const query = ref('企业知识库如何保证回答可追溯？')
 const topK = ref(10)
 const loading = ref(false)
 const errorMessage = ref('')
 const trace = ref<SearchDebugTrace | null>(null)
+const traceId = ref('')
+const replay = ref<TraceReplay | null>(null)
+const replayLoading = ref(false)
+const replayError = ref('')
+
+async function replayTrace(): Promise<void> {
+  const currentTraceId = traceId.value.trim()
+  if (currentTraceId.length === 0) {
+    return
+  }
+  replayLoading.value = true
+  replayError.value = ''
+  try {
+    replay.value = await fetchTraceReplay(currentTraceId)
+  } catch (error: unknown) {
+    replayError.value =
+      error instanceof Error ? error.message : 'Trace 回放失败'
+  } finally {
+    replayLoading.value = false
+  }
+}
 
 async function runSearch(): Promise<void> {
   const currentQuery = query.value.trim()
@@ -70,6 +91,56 @@ async function runSearch(): Promise<void> {
         运行
       </ElButton>
     </form>
+
+    <form class="trace-toolbar" @submit.prevent="replayTrace">
+      <ElInput
+        v-model="traceId"
+        placeholder="输入 trace_id 回放"
+        :prefix-icon="Search"
+      />
+      <ElButton :loading="replayLoading" native-type="submit"
+        >回放 Trace</ElButton
+      >
+    </form>
+
+    <ElAlert
+      v-if="replayError"
+      :title="replayError"
+      type="error"
+      :closable="false"
+      show-icon
+    />
+
+    <section v-if="replay" class="trace-panel">
+      <header>
+        <strong>Trace {{ replay.trace_id }}</strong>
+        <span>{{ replay.usage_records.length }} 个环节</span>
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>step</th>
+            <th>model</th>
+            <th>tokens</th>
+            <th>latency</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="record in replay.usage_records"
+            :key="`${record.step}-${record.created_at}`"
+          >
+            <td>{{ record.step }}</td>
+            <td>{{ record.model }}</td>
+            <td>{{ record.input_tokens }} / {{ record.output_tokens }}</td>
+            <td>{{ record.latency_ms }} ms</td>
+          </tr>
+        </tbody>
+      </table>
+      <pre v-if="replay.snapshot">{{
+        JSON.stringify(replay.snapshot, null, 2)
+      }}</pre>
+    </section>
 
     <ElAlert
       v-if="errorMessage"
@@ -220,6 +291,43 @@ async function runSearch(): Promise<void> {
   margin: 0;
 }
 
+.trace-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+}
+
+.trace-panel {
+  border: 1px solid #33454b;
+  border-radius: 8px;
+  background: #172126;
+  color: #d6e0e2;
+  padding: 0.9rem;
+}
+
+.trace-panel header {
+  display: flex;
+  justify-content: space-between;
+}
+
+.trace-panel table {
+  width: 100%;
+  margin-top: 0.75rem;
+  border-collapse: collapse;
+}
+
+.trace-panel th,
+.trace-panel td {
+  border-top: 1px solid #33454b;
+  padding: 0.45rem;
+  text-align: left;
+}
+
+.trace-panel pre {
+  max-height: 18rem;
+  overflow: auto;
+  color: #9ccbc3;
+}
 @media (max-width: 800px) {
   .debug-header {
     align-items: start;

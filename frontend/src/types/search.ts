@@ -37,3 +37,17 @@ export interface SearchDebugTrace {
   fusion: SearchStep
   rerank: SearchStep
 }
+export interface TraceUsageRecord {
+  step: string
+  model: string
+  input_tokens: number
+  output_tokens: number
+  latency_ms: number
+  created_at: string
+}
+
+export interface TraceReplay {
+  trace_id: string
+  snapshot: Record<string, unknown> | null
+  usage_records: TraceUsageRecord[]
+}

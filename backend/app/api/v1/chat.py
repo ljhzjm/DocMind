@@ -2,6 +2,7 @@ import json
 from collections.abc import AsyncIterator
 from functools import lru_cache
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -33,11 +34,14 @@ async def stream_chat(
 ) -> StreamingResponse:
     """通过 SSE 发送检索元数据、answer 增量和最终引用。"""
 
+    trace_id = uuid4().hex
+
     async def event_stream() -> AsyncIterator[str]:
         async for event in pipeline.stream(
             session,
             request.query,
             top_k=request.top_k,
+            trace_id=trace_id,
         ):
             if isinstance(event, RetrievalEvent):
                 yield _sse(
@@ -45,6 +49,8 @@ async def stream_chat(
                     {
                         "latency_ms": event.latency_ms,
                         "chunk_count": event.chunk_count,
+                        "trace_id": trace_id,
+                        "cached": event.cached,
                         "contexts": [
                             {
                                 "citation_number": context.citation_number,
@@ -62,9 +68,20 @@ async def stream_chat(
             elif isinstance(event, AnswerDeltaEvent):
                 yield _sse("answer", {"delta": event.delta})
             elif isinstance(event, DoneEvent):
-                yield _sse("done", {"citations": event.citations})
+                yield _sse(
+                    "done",
+                    {
+                        "citations": event.citations,
+                        "trace_id": trace_id,
+                        "usage": event.usage.model_dump(),
+                        "model": event.model_name,
+                    },
+                )
             elif isinstance(event, ErrorEvent):
-                yield _sse("error", {"message": event.message})
+                yield _sse(
+                    "error",
+                    {"message": event.message, "trace_id": trace_id},
+                )
 
     return StreamingResponse(
         event_stream(),
@@ -72,6 +89,7 @@ async def stream_chat(
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
+            "X-Trace-ID": trace_id,
         },
     )
 

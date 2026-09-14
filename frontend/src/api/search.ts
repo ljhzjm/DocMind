@@ -2,7 +2,7 @@
 // Vue 概念：URLSearchParams 负责安全编码查询参数和中文内容。
 // Vue 概念：调试页面只需处理成功数据或 Error，不接触底层响应细节。
 
-import type { SearchDebugTrace } from '../types/search'
+import type { SearchDebugTrace, TraceReplay } from '../types/search'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(
   /\/$/,
@@ -23,4 +23,13 @@ export async function fetchSearchDebug(
     throw new Error(`检索调试请求失败：${response.status}`)
   }
   return (await response.json()) as SearchDebugTrace
+}
+export async function fetchTraceReplay(traceId: string): Promise<TraceReplay> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/search/trace/${encodeURIComponent(traceId)}`,
+  )
+  if (!response.ok) {
+    throw new Error(`Trace 回放失败：${response.status}`)
+  }
+  return (await response.json()) as TraceReplay
 }

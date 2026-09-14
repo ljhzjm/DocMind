@@ -23,7 +23,10 @@ class ModelConfig(BaseModel):
 
     provider: str = Field(min_length=1)
     model: str = Field(min_length=1)
+    fallbacks: list[str] = Field(default_factory=list)
     stream_include_usage: bool = False
+    input_cost_per_million: float = Field(default=0.0, ge=0)
+    output_cost_per_million: float = Field(default=0.0, ge=0)
 
 
 class LLMConfig(BaseModel):
@@ -39,6 +42,10 @@ class LLMConfig(BaseModel):
             if model.provider not in self.providers:
                 raise ValueError(f"model '{alias}' references unknown provider")
 
+        for alias, model in self.models.items():
+            for fallback in model.fallbacks:
+                if fallback not in self.models:
+                    raise ValueError(f"model '{alias}' references unknown fallback '{fallback}'")
         for task, alias in self.routes.items():
             if alias not in self.models:
                 raise ValueError(f"route '{task}' references unknown model")

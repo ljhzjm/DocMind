@@ -20,6 +20,8 @@ vi.mock('../api/chatStream', () => ({
         type: 'retrieval',
         latency_ms: 12,
         chunk_count: 1,
+        trace_id: 'trace-test',
+        cached: false,
         contexts: [
           {
             citation_number: 1,
@@ -34,7 +36,13 @@ vi.mock('../api/chatStream', () => ({
       })
       handlers.onAnswer({ type: 'answer', delta: 'DocMind 是' })
       handlers.onAnswer({ type: 'answer', delta: '知识库问答系统 [1]。' })
-      handlers.onDone({ type: 'done', citations: [1] })
+      handlers.onDone({
+        type: 'done',
+        citations: [1],
+        trace_id: 'trace-test',
+        model: 'test-model',
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      })
     },
   ),
 }))

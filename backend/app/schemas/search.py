@@ -44,3 +44,18 @@ class SearchDebugResponse(BaseModel):
     bm25: StepResultsResponse
     fusion: StepResultsResponse
     rerank: StepResultsResponse
+
+
+class UsageRecordResponse(BaseModel):
+    step: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+    created_at: str
+
+
+class TraceReplayResponse(BaseModel):
+    trace_id: str
+    snapshot: dict[str, object] | None
+    usage_records: list[UsageRecordResponse]

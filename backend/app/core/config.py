@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     rerank_provider: str = "passthrough"
     celery_broker_url: str = ""
     celery_result_backend: str = ""
+    answer_cache_enabled: bool = True
+    answer_cache_ttl_seconds: int = 3600
+    rate_limit_enabled: bool = True
+    rate_limit_capacity: int = 60
+    rate_limit_refill_per_second: float = 1.0
+    log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE,
@@ -66,6 +72,12 @@ class Settings(BaseSettings):
             raise ValueError("rag_refusal_threshold must not be negative")
         if self.retrieval_top_k <= 0:
             raise ValueError("retrieval_top_k must be positive")
+        if self.answer_cache_ttl_seconds <= 0:
+            raise ValueError("answer_cache_ttl_seconds must be positive")
+        if self.rate_limit_capacity <= 0:
+            raise ValueError("rate_limit_capacity must be positive")
+        if self.rate_limit_refill_per_second <= 0:
+            raise ValueError("rate_limit_refill_per_second must be positive")
         if self.max_upload_size_bytes <= 0:
             raise ValueError("max_upload_size_bytes must be positive")
         return self

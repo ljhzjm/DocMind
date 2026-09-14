@@ -23,6 +23,7 @@ class UsageStep(StrEnum):
 
     REWRITE = "rewrite"
     RETRIEVE = "retrieve"
+    RERANK = "rerank"
     GENERATE = "generate"
 
 

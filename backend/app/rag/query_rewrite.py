@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, Field, ValidationError
 
 from app.llm import LLMMessage, LLMRouter, LLMTask, create_default_router
-from app.llm.base import LLMError
+from app.llm.base import LLMError, TokenUsage
 from app.rag.parsing import parse_json_object
 from app.rag.prompts import render_prompt
 
@@ -17,6 +17,8 @@ class RewritePayload(BaseModel):
 class RewriteResult:
     query: str
     keywords: list[str]
+    usage: TokenUsage = TokenUsage()
+    model_name: str = "original"
 
     @property
     def retrieval_query(self) -> str:
@@ -43,6 +45,11 @@ class QueryRewriter:
             )
             payload = RewritePayload.model_validate(parse_json_object(result.text))
             keywords = [keyword.strip() for keyword in payload.keywords if keyword.strip()]
-            return RewriteResult(query=payload.rewritten_query.strip(), keywords=keywords)
+            return RewriteResult(
+                query=payload.rewritten_query.strip(),
+                keywords=keywords,
+                usage=result.usage,
+                model_name=route.model_name,
+            )
         except (LLMError, ValidationError, ValueError, TypeError):
             return RewriteResult(query=query, keywords=[])
