@@ -2,8 +2,20 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 
+from dotenv import load_dotenv
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+_ENV_FILE = _BACKEND_ROOT / ".env"
+
+
+def load_environment_file(path: Path) -> None:
+    """显式加载 .env，使供应商密钥也能被 os.getenv() 读取。"""
+    load_dotenv(path, override=False)
+
+
+load_environment_file(_ENV_FILE)
 
 
 class Settings(BaseSettings):
@@ -28,7 +40,7 @@ class Settings(BaseSettings):
     celery_result_backend: str = ""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
