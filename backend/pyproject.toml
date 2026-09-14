@@ -1,0 +1,55 @@
+[project]
+name = "docmind-backend"
+version = "0.1.0"
+description = "DocMind enterprise RAG knowledge base API"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "alembic>=1.14,<2.0",
+    "fastapi>=0.115,<1.0",
+    "pgvector>=0.3,<1.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "pydantic-settings>=2.6,<3.0",
+    "redis>=5.2,<7.0",
+    "sqlalchemy>=2.0,<3.0",
+    "uvicorn[standard]>=0.32,<1.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28,<1.0",
+    "mypy>=1.13,<2.0",
+    "pytest>=8.3,<10.0",
+    "pytest-asyncio>=0.24,<2.0",
+    "pytest-cov>=6.0,<8.0",
+    "ruff>=0.8,<1.0",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["app", "tests"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["pgvector.*"]
+ignore_missing_imports = true
