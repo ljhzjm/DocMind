@@ -74,6 +74,16 @@ def test_initial_migration_upgrade_and_downgrade(
                     """
                 )
             )
+            embedding_is_nullable = connection.scalar(
+                text(
+                    """
+                    SELECT is_nullable
+                    FROM information_schema.columns
+                    WHERE table_name = 'chunks'
+                      AND column_name = 'embedding'
+                    """
+                )
+            )
             document_statuses = connection.scalars(
                 text(
                     """
@@ -87,6 +97,7 @@ def test_initial_migration_upgrade_and_downgrade(
             ).all()
 
         assert vector_type == "vector(1024)"
+        assert embedding_is_nullable == "YES"
         assert hnsw_definition is not None
         assert "USING hnsw" in hnsw_definition
         assert "vector_cosine_ops" in hnsw_definition

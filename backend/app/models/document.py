@@ -129,7 +129,7 @@ class Chunk(Base):
         ForeignKey("chunks.id", ondelete="CASCADE"),
         nullable=True,
     )
-    embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
 
     document: Mapped[Document] = relationship(back_populates="chunks")
     parent: Mapped[Chunk | None] = relationship(

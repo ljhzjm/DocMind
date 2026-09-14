@@ -47,6 +47,7 @@ finally {
 Push-Location $backendRoot
 try {
     uv sync --all-groups
+    uv run alembic upgrade head
 }
 finally {
     Pop-Location
@@ -64,6 +65,7 @@ if (-not (Test-Path -LiteralPath $frontendModules)) {
 }
 
 $backendProcess = $null
+$workerProcess = $null
 $frontendProcess = $null
 
 try {
@@ -74,6 +76,17 @@ try {
             '--host', '127.0.0.1',
             '--port', '18000',
             '--reload'
+        ) `
+        -WorkingDirectory $backendRoot `
+        -NoNewWindow `
+        -PassThru
+
+    $workerProcess = Start-Process `
+        -FilePath (Get-Command uv).Source `
+        -ArgumentList @(
+            'run', 'celery',
+            '-A', 'app.workers.celery_app:celery_app',
+            'worker', '--loglevel=info', '--pool=solo'
         ) `
         -WorkingDirectory $backendRoot `
         -NoNewWindow `
@@ -90,16 +103,25 @@ try {
     Write-Host 'DocMind is running:' -ForegroundColor Green
     Write-Host '  Frontend: http://127.0.0.1:15173'
     Write-Host '  API:      http://127.0.0.1:18000/health'
-    Write-Host 'Press Ctrl+C to stop frontend and backend processes.'
+    Write-Host '  Worker:   Celery ingestion worker'
+    Write-Host 'Press Ctrl+C to stop API, worker, and frontend processes.'
 
-    while (-not $backendProcess.HasExited -and -not $frontendProcess.HasExited) {
+    while (
+        -not $backendProcess.HasExited -and
+        -not $workerProcess.HasExited -and
+        -not $frontendProcess.HasExited
+    ) {
         Start-Sleep -Seconds 1
         $backendProcess.Refresh()
+        $workerProcess.Refresh()
         $frontendProcess.Refresh()
     }
 
     if ($backendProcess.HasExited) {
         throw "Backend exited with code $($backendProcess.ExitCode)."
+    }
+    if ($workerProcess.HasExited) {
+        throw "Worker exited with code $($workerProcess.ExitCode)."
     }
     if ($frontendProcess.HasExited) {
         throw "Frontend exited with code $($frontendProcess.ExitCode)."
@@ -108,6 +130,9 @@ try {
 finally {
     if ($null -ne $backendProcess -and -not $backendProcess.HasExited) {
         Stop-Process -Id $backendProcess.Id
+    }
+    if ($null -ne $workerProcess -and -not $workerProcess.HasExited) {
+        Stop-Process -Id $workerProcess.Id
     }
     if ($null -ne $frontendProcess -and -not $frontendProcess.HasExited) {
         Stop-Process -Id $frontendProcess.Id

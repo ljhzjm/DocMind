@@ -24,3 +24,6 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local uploaded documents
+backend/storage/

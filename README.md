@@ -1,7 +1,7 @@
 # DocMind
 
-企业级 RAG 知识库问答系统。当前仓库只包含可运行的前后端脚手架、工程规范和本地基础设施，
-尚未加入 RAG、鉴权、文档解析或数据模型等业务实现。
+企业级 RAG 知识库问答系统。当前包含前后端脚手架、LLM 网关、数据库迁移、文档解析/切片
+与 Celery ingestion 流程；问答与检索业务尚待接入。
 
 ## 技术栈
 
@@ -35,14 +35,18 @@
 .\scripts\dev.ps1
 ```
 
-脚本会启动 PostgreSQL 与 Redis、同步依赖，并在前台运行两个开发服务：
+脚本会启动 PostgreSQL 与 Redis、执行 Alembic 迁移、同步依赖，并在前台运行 API、
+Celery worker 与前端开发服务：
 
 - 前端：<http://127.0.0.1:15173>
 - 后端健康检查：<http://127.0.0.1:18000/health>
+- 文档上传：`POST http://127.0.0.1:18000/api/v1/documents`
+- 状态轮询：`GET http://127.0.0.1:18000/api/v1/documents/{document_id}/status`
+- Celery worker：消费文档解析任务
 - PostgreSQL：`127.0.0.1:15432`
 - Redis：`127.0.0.1:16379`
 
-按 `Ctrl+C` 结束前后端开发进程；基础设施可用 `docker compose down` 停止。
+按 `Ctrl+C` 结束 API、worker 与前端进程；基础设施可用 `docker compose down` 停止。
 
 ## 一键验证
 
