@@ -21,3 +21,26 @@ class SearchResponse(BaseModel):
     mode: SearchMode
     top_k: int = Field(ge=1)
     results: list[SearchResultResponse]
+
+
+class StepResultsResponse(BaseModel):
+    latency_ms: float
+    error: str | None = None
+    results: list[SearchResultResponse]
+
+
+class RewriteDebugResponse(BaseModel):
+    query: str
+    keywords: list[str]
+    retrieval_query: str
+    latency_ms: float
+
+
+class SearchDebugResponse(BaseModel):
+    query: str
+    top_k: int = Field(ge=1)
+    rewrite: RewriteDebugResponse
+    vector: StepResultsResponse
+    bm25: StepResultsResponse
+    fusion: StepResultsResponse
+    rerank: StepResultsResponse
