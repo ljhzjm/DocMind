@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -82,3 +82,24 @@ def replace_chunks(
 
     document.chunk_count = len(drafts)
     return len(drafts)
+
+
+async def list_documents(
+    session: AsyncSession,
+    *,
+    limit: int = 100,
+) -> list[Document]:
+    result = await session.scalars(
+        select(Document).order_by(Document.created_at.desc()).limit(limit)
+    )
+    return list(result.all())
+
+
+async def list_document_chunks(
+    session: AsyncSession,
+    document_id: UUID,
+) -> list[Chunk]:
+    result = await session.scalars(
+        select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.chunk_index)
+    )
+    return list(result.all())

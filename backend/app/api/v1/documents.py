@@ -20,9 +20,16 @@ from app.models.enums import DocumentStatus
 from app.repositories.documents import (
     create_document,
     get_document,
+    list_document_chunks,
+    list_documents,
     set_document_status,
 )
-from app.schemas.document import DocumentStatusResponse, DocumentUploadResponse
+from app.schemas.document import (
+    ChunkListItem,
+    DocumentListItem,
+    DocumentStatusResponse,
+    DocumentUploadResponse,
+)
 from app.workers.tasks import process_document_task
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -115,3 +122,48 @@ async def get_document_status(
         status=document.status,
         chunk_count=document.chunk_count,
     )
+
+
+@router.get("", response_model=list[DocumentListItem])
+async def get_documents(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> list[DocumentListItem]:
+    """按上传时间返回文档列表。"""
+    documents = await list_documents(session)
+    return [
+        DocumentListItem(
+            document_id=document.id,
+            filename=document.filename,
+            status=document.status,
+            file_type=document.file_type,
+            file_size=document.file_size,
+            chunk_count=document.chunk_count,
+            created_at=document.created_at,
+        )
+        for document in documents
+    ]
+
+
+@router.get("/{document_id}/chunks", response_model=list[ChunkListItem])
+async def get_chunks(
+    document_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> list[ChunkListItem]:
+    """返回指定文档的切片列表。"""
+    document = await get_document(session, document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="document not found",
+        )
+    chunks = await list_document_chunks(session, document_id)
+    return [
+        ChunkListItem(
+            chunk_id=chunk.id,
+            chunk_index=chunk.chunk_index,
+            content=chunk.content,
+            page_number=chunk.page_number,
+            heading_path=chunk.heading_path,
+        )
+        for chunk in chunks
+    ]
