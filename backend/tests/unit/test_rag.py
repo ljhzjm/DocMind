@@ -242,7 +242,7 @@ async def test_answer_generator_streams_only_after_valid_citations() -> None:
     provider = StreamingStubProvider(
         [
             ['{"citations":[2],', '"answer":"invalid [2]"}'],
-            ['{"citations":[1],"ans', 'wer":"合法 [1]"}'],
+            ['{"citations":[1],"answer":"合', '法 [1]"}'],
         ]
     )
 

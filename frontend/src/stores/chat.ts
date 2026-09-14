@@ -35,6 +35,67 @@ function createAssistantMessage(): ChatMessage {
   }
 }
 
+interface StreamRenderer {
+  push: (delta: string) => void
+  complete: (citations: number[]) => void
+  fail: (message: string) => void
+  cancel: () => void
+}
+
+function createStreamRenderer(
+  assistant: ChatMessage,
+  onComplete: () => void,
+  onFailure: () => void,
+): StreamRenderer {
+  let pending = ''
+  let completedCitations: number[] | null = null
+  let failureMessage: string | null = null
+  let cancelled = false
+  const timer = globalThis.setInterval(() => {
+    if (cancelled) {
+      return
+    }
+
+    if (pending.length > 0) {
+      // 每次最多显示 2 个字符，避免上游 token 突发时整段一次性渲染。
+      const step = 2
+      assistant.content += pending.slice(0, step)
+      pending = pending.slice(step)
+      return
+    }
+
+    if (completedCitations !== null) {
+      assistant.citations = completedCitations
+      assistant.streaming = false
+      globalThis.clearInterval(timer)
+      onComplete()
+      return
+    }
+
+    if (failureMessage !== null) {
+      assistant.error = failureMessage
+      assistant.streaming = false
+      globalThis.clearInterval(timer)
+      onFailure()
+    }
+  }, 16)
+
+  return {
+    push(delta) {
+      pending += delta
+    },
+    complete(citations) {
+      completedCitations = citations
+    },
+    fail(message) {
+      failureMessage = message
+    },
+    cancel() {
+      cancelled = true
+      globalThis.clearInterval(timer)
+    },
+  }
+}
 export const useChatStore = defineStore('chat', () => {
   const sessions = ref<ChatSession[]>([createSession()])
   const activeSessionId = ref(sessions.value[0]?.id ?? '')
@@ -109,12 +170,25 @@ export const useChatStore = defineStore('chat', () => {
       error: '',
       streaming: false,
     })
-    const assistant = createAssistantMessage()
-    session.messages.push(assistant)
+    session.messages.push(createAssistantMessage())
+    const assistant = session.messages[session.messages.length - 1]
+    if (assistant === undefined) {
+      return
+    }
     query.value = ''
     retrievalSummary.value = ''
     status.value = 'streaming'
     activeController = new AbortController()
+
+    const renderer = createStreamRenderer(
+      assistant,
+      () => {
+        status.value = 'completed'
+      },
+      () => {
+        status.value = 'error'
+      },
+    )
 
     try {
       await streamChat(currentQuery, activeController.signal, {
@@ -123,20 +197,17 @@ export const useChatStore = defineStore('chat', () => {
           retrievalSummary.value = `检索完成：${event.chunk_count} 个片段，${event.latency_ms.toFixed(1)} ms`
         },
         onAnswer(event) {
-          assistant.content += event.delta
+          renderer.push(event.delta)
         },
         onDone(event) {
-          assistant.citations = event.citations
-          assistant.streaming = false
-          status.value = 'completed'
+          renderer.complete(event.citations)
         },
         onError(event) {
-          assistant.error = event.message
-          assistant.streaming = false
-          status.value = 'error'
+          renderer.fail(event.message)
         },
       })
     } catch (error: unknown) {
+      renderer.cancel()
       if (error instanceof DOMException && error.name === 'AbortError') {
         assistant.streaming = false
         status.value = 'stopped'

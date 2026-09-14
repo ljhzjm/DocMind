@@ -23,6 +23,7 @@ class CitationFirstAnswerParser:
         self._state = "citations"
         self._citations: list[int] | None = None
         self._answer_parts: list[str] = []
+        self._answer_started = False
         self._answer_emitted = False
         self._escape_pending = False
         self._unicode_digits: str | None = None
@@ -87,10 +88,12 @@ class CitationFirstAnswerParser:
         return citations, array_index + relative_end
 
     def _consume_answer(self) -> str:
-        answer_index = self._find_answer_value_start()
-        if answer_index is None:
-            return ""
-        self._buffer = self._buffer[answer_index:]
+        if not self._answer_started:
+            answer_index = self._find_answer_value_start()
+            if answer_index is None:
+                return ""
+            self._buffer = self._buffer[answer_index:]
+            self._answer_started = True
         output: list[str] = []
 
         index = 0

@@ -43,6 +43,7 @@ import ChatView from './ChatView.vue'
 
 describe('ChatView', () => {
   it('renders streamed Markdown and citation context', async () => {
+    vi.useFakeTimers()
     const wrapper = mount(ChatView, {
       global: {
         plugins: [createPinia(), ElementPlus],
@@ -52,9 +53,19 @@ describe('ChatView', () => {
     await wrapper.get('textarea').setValue('DocMind 是什么？')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
+    await vi.advanceTimersByTimeAsync(20)
+    await flushPromises()
+
+    const partialText = wrapper.get('.markdown-body').text()
+    expect(partialText.length).toBeGreaterThan(0)
+    expect(partialText).not.toContain('知识库问答系统')
+
+    await vi.runAllTimersAsync()
+    await flushPromises()
 
     expect(wrapper.get('.markdown-body').text()).toContain('知识库问答系统')
     expect(wrapper.get('.citation-ref').text()).toBe('[1]')
     expect(wrapper.get('.retrieval-line').text()).toContain('1 个片段')
+    vi.useRealTimers()
   })
 })
