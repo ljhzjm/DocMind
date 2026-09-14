@@ -43,6 +43,7 @@ Celery worker 与前端开发服务：
 - 文档上传：`POST http://127.0.0.1:18000/api/v1/documents`
 - 状态轮询：`GET http://127.0.0.1:18000/api/v1/documents/{document_id}/status`
 - 混合检索：`GET http://127.0.0.1:18000/api/v1/search?q=关键词&mode=hybrid`
+- RAG SSE：`POST http://127.0.0.1:18000/api/chat/stream`
 - Celery worker：消费文档解析任务
 - PostgreSQL：`127.0.0.1:15432`
 - Redis：`127.0.0.1:16379`

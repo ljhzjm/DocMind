@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     chunk_size: int = 512
     chunk_overlap: int = 64
     retrieval_top_k: int = 10
+    rag_candidate_top_k: int = 20
+    rag_context_top_k: int = 5
+    rag_refusal_threshold: float = 0.0
+    rag_retrieval_mode: str = "hybrid"
+    rerank_enabled: bool = False
+    rerank_provider: str = "passthrough"
     celery_broker_url: str = ""
     celery_result_backend: str = ""
 
@@ -42,6 +48,10 @@ class Settings(BaseSettings):
             raise ValueError("chunk_size must be positive")
         if self.chunk_overlap < 0 or self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be between 0 and chunk_size")
+        if self.rag_candidate_top_k <= 0 or self.rag_context_top_k <= 0:
+            raise ValueError("RAG top_k values must be positive")
+        if self.rag_refusal_threshold < 0:
+            raise ValueError("rag_refusal_threshold must not be negative")
         if self.retrieval_top_k <= 0:
             raise ValueError("retrieval_top_k must be positive")
         if self.max_upload_size_bytes <= 0:
