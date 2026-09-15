@@ -24,7 +24,7 @@ class EvaluationRun(Base):
     __tablename__ = "evaluation_runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'completed', 'failed')",
+            "status IN ('queued', 'running', 'completed', 'failed', 'cancelled')",
             name="ck_evaluation_runs_status",
         ),
         CheckConstraint(
@@ -61,6 +61,16 @@ class EvaluationRun(Base):
         server_default=text("0"),
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempt: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+    )
+    checkpoint: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+    )
     configs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     results: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(

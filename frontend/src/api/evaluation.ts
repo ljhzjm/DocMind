@@ -54,3 +54,27 @@ export async function fetchEvaluationRun(
   }
   return (await response.json()) as EvalRunResponse
 }
+
+export async function cancelEvaluationRun(
+  runId: string,
+): Promise<EvalRunResponse> {
+  const response = await fetch(`${EVAL_URL}/runs/${runId}/cancel`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(`取消评测失败：${response.status}`)
+  }
+  return (await response.json()) as EvalRunResponse
+}
+
+export async function resumeEvaluationRun(
+  runId: string,
+): Promise<EvaluationRunAccepted> {
+  const response = await fetch(`${EVAL_URL}/runs/${runId}/resume`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(`恢复评测失败：${response.status}`)
+  }
+  return (await response.json()) as EvaluationRunAccepted
+}

@@ -53,17 +53,22 @@ async def get_evaluation_run(
 async def mark_evaluation_run_running(
     session: AsyncSession,
     run_id: UUID,
-) -> None:
-    await session.execute(
+) -> bool:
+    result = await session.execute(
         update(EvaluationRun)
-        .where(EvaluationRun.id == run_id)
+        .where(
+            EvaluationRun.id == run_id,
+            EvaluationRun.status == "queued",
+        )
         .values(
             status="running",
             started_at=datetime.now(UTC),
             error_message=None,
         )
+        .returning(EvaluationRun.id)
     )
     await session.commit()
+    return result.scalar_one_or_none() is not None
 
 
 async def update_evaluation_run_progress(
@@ -72,15 +77,15 @@ async def update_evaluation_run_progress(
     *,
     completed: int,
     total: int,
+    checkpoint: list[dict[str, Any]] | None = None,
 ) -> None:
-    await session.execute(
-        update(EvaluationRun)
-        .where(EvaluationRun.id == run_id)
-        .values(
-            progress_completed=max(0, completed),
-            progress_total=max(0, total),
-        )
-    )
+    values: dict[str, Any] = {
+        "progress_completed": max(0, completed),
+        "progress_total": max(0, total),
+    }
+    if checkpoint is not None:
+        values["checkpoint"] = checkpoint
+    await session.execute(update(EvaluationRun).where(EvaluationRun.id == run_id).values(**values))
     await session.commit()
 
 
@@ -92,7 +97,10 @@ async def complete_evaluation_run(
 ) -> None:
     await session.execute(
         update(EvaluationRun)
-        .where(EvaluationRun.id == run_id)
+        .where(
+            EvaluationRun.id == run_id,
+            EvaluationRun.status == "running",
+        )
         .values(
             status="completed",
             results=results,
@@ -112,7 +120,10 @@ async def fail_evaluation_run(
 ) -> None:
     await session.execute(
         update(EvaluationRun)
-        .where(EvaluationRun.id == run_id)
+        .where(
+            EvaluationRun.id == run_id,
+            EvaluationRun.status.in_(("queued", "running")),
+        )
         .values(
             status="failed",
             error_message=error_message[:2000],
@@ -120,3 +131,50 @@ async def fail_evaluation_run(
         )
     )
     await session.commit()
+
+
+async def cancel_evaluation_run(
+    session: AsyncSession,
+    run_id: UUID,
+) -> bool:
+    result = await session.execute(
+        update(EvaluationRun)
+        .where(
+            EvaluationRun.id == run_id,
+            EvaluationRun.status.in_(("queued", "running")),
+        )
+        .values(
+            status="cancelled",
+            completed_at=datetime.now(UTC),
+            error_message=None,
+        )
+        .returning(EvaluationRun.id)
+    )
+    await session.commit()
+    return result.scalar_one_or_none() is not None
+
+
+async def resume_evaluation_run(
+    session: AsyncSession,
+    run_id: UUID,
+    *,
+    task_id: str,
+) -> bool:
+    result = await session.execute(
+        update(EvaluationRun)
+        .where(
+            EvaluationRun.id == run_id,
+            EvaluationRun.status.in_(("failed", "cancelled")),
+        )
+        .values(
+            status="queued",
+            task_id=task_id,
+            attempt=EvaluationRun.attempt + 1,
+            started_at=None,
+            completed_at=None,
+            error_message=None,
+        )
+        .returning(EvaluationRun.id)
+    )
+    await session.commit()
+    return result.scalar_one_or_none() is not None

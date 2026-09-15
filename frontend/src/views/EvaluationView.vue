@@ -2,7 +2,7 @@
 <!-- Vue 概念：v-for 渲染多个检索配置行和每个配置的指标结果。 -->
 <!-- Vue 概念：async 事件处理函数在请求前后切换 loading 状态。 -->
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   ElButton,
   ElInput,
@@ -12,7 +12,7 @@ import {
   ElSelect,
   ElSwitch,
 } from 'element-plus'
-import { Play, Plus, Trash2 } from 'lucide-vue-next'
+import { Ban, Play, Plus, RefreshCcw, Trash2 } from 'lucide-vue-next'
 
 import { fetchEvalDatasets, fetchEvaluationRuns } from '../api/evaluation'
 import EvaluationResults from '../components/EvaluationResults.vue'
@@ -30,6 +30,28 @@ const errorMessage = ref('')
 const evaluationRuns = ref<EvaluationRunSummary[]>([])
 const selectedRunId = ref('')
 const evaluationRun = useEvaluationRun()
+const canResume = computed(
+  () =>
+    evaluationRun.status.value === 'failed' ||
+    evaluationRun.status.value === 'cancelled',
+)
+const actionLabel = computed(() =>
+  evaluationRun.isActive.value
+    ? '取消评测'
+    : canResume.value
+      ? '继续评测'
+      : '运行评测',
+)
+const actionType = computed<'primary' | 'danger' | 'warning'>(() =>
+  evaluationRun.isActive.value
+    ? 'danger'
+    : canResume.value
+      ? 'warning'
+      : 'primary',
+)
+const actionIcon = computed(() =>
+  evaluationRun.isActive.value ? Ban : canResume.value ? RefreshCcw : Play,
+)
 const configs = ref<RetrievalConfigInput[]>([
   { name: '向量 Top5', mode: 'vector', top_k: 5, rerank: false },
   { name: 'BM25 Top5', mode: 'bm25', top_k: 5, rerank: false },
@@ -103,6 +125,24 @@ async function run(): Promise<void> {
     loading.value = false
   }
 }
+
+async function primaryAction(): Promise<void> {
+  loading.value = true
+  try {
+    if (evaluationRun.isActive.value) {
+      await evaluationRun.cancel()
+    } else if (canResume.value) {
+      await evaluationRun.resume()
+      evaluationRuns.value = await fetchEvaluationRuns()
+    } else {
+      await run()
+    }
+  } catch (error: unknown) {
+    errorMessage.value = error instanceof Error ? error.message : '操作失败'
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <template>
@@ -113,13 +153,13 @@ async function run(): Promise<void> {
         <h2>评测中心</h2>
       </div>
       <ElButton
-        type="primary"
-        :icon="Play"
-        :loading="loading || evaluationRun.isActive.value"
-        :disabled="evaluationRun.isActive.value"
-        @click="run"
+        :type="actionType"
+        :icon="actionIcon"
+        :loading="loading"
+        :disabled="loading"
+        @click="primaryAction"
       >
-        运行评测
+        {{ actionLabel }}
       </ElButton>
     </header>
 
@@ -209,92 +249,4 @@ async function run(): Promise<void> {
   </section>
 </template>
 
-<style scoped>
-.evaluation-page {
-  display: grid;
-  gap: 1rem;
-}
-
-.page-header,
-.dataset-row,
-.history-row,
-.config-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.page-header {
-  justify-content: space-between;
-}
-
-.page-header h2 {
-  margin: 0;
-}
-
-.eyebrow {
-  margin: 0 0 0.3rem;
-  color: #0f766e;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.config-panel,
-.run-progress {
-  border: 1px solid #d3dfe1;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 1rem;
-}
-
-.run-progress {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.run-progress > div {
-  display: flex;
-  justify-content: space-between;
-  color: #52666b;
-}
-
-.config-panel {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.dataset-row {
-  flex-wrap: wrap;
-}
-
-.history-row {
-  border-top: 1px solid #e2eaeb;
-  padding-top: 0.75rem;
-}
-
-.config-row {
-  display: grid;
-  grid-template-columns: minmax(10rem, 1.4fr) 9rem 7rem 7rem auto;
-  border-top: 1px solid #e2eaeb;
-  padding-top: 0.75rem;
-}
-
-.switch-label {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  color: #52666b;
-}
-
-.page-error {
-  color: #a3302b;
-}
-
-@media (max-width: 900px) {
-  .config-row {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+<style scoped src="./evaluation-view.css"></style>

@@ -1,6 +1,6 @@
 from typing import Any
 
-from app.evaluation.types import ConfigMetrics
+from app.evaluation.types import CaseMetrics, ConfigMetrics
 from app.schemas.evaluation import CaseMetricsResponse, ConfigMetricsResponse
 
 
@@ -46,3 +46,23 @@ def config_metrics_payload(result: ConfigMetrics) -> dict[str, Any]:
         ],
     )
     return response.model_dump(mode="json")
+
+
+def case_metrics_payload(result: CaseMetrics) -> dict[str, Any]:
+    """把单样本指标写入 checkpoint。"""
+    return CaseMetricsResponse(
+        question=result.question,
+        recall_at_5=result.recall_at_5,
+        reciprocal_rank=result.reciprocal_rank,
+        faithfulness=result.faithfulness,
+        answer_relevance=result.answer_relevance,
+        ragas_faithfulness=result.ragas_faithfulness,
+        ragas_answer_relevance=result.ragas_answer_relevance,
+        latency_ms=result.latency_ms,
+        first_token_latency_ms=result.first_token_latency_ms,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        estimated_cost=result.estimated_cost,
+        refused=result.refused,
+        error=result.error,
+    ).model_dump(mode="json")

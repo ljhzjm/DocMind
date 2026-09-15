@@ -1,0 +1,87 @@
+.evaluation-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.page-header,
+.dataset-row,
+.history-row,
+.config-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.page-header {
+  justify-content: space-between;
+}
+
+.page-header h2 {
+  margin: 0;
+}
+
+.eyebrow {
+  margin: 0 0 0.3rem;
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.config-panel,
+.run-progress {
+  border: 1px solid #d3dfe1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 1rem;
+}
+
+.run-progress {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.run-progress > div {
+  display: flex;
+  justify-content: space-between;
+  color: #52666b;
+}
+
+.config-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.dataset-row {
+  flex-wrap: wrap;
+}
+
+.history-row {
+  border-top: 1px solid #e2eaeb;
+  padding-top: 0.75rem;
+}
+
+.config-row {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.4fr) 9rem 7rem 7rem auto;
+  border-top: 1px solid #e2eaeb;
+  padding-top: 0.75rem;
+}
+
+.switch-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #52666b;
+}
+
+.page-error {
+  color: #a3302b;
+}
+
+@media (max-width: 900px) {
+  .config-row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -57,3 +57,23 @@ class ConfigMetrics:
     refusal_rate: float
     hallucination_risk: float
     cases: list[CaseMetrics] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class EvaluationProgress:
+    """单个样本完成事件，供 Worker 更新进度和 checkpoint。"""
+
+    completed: int
+    total: int
+    config_index: int
+    case_index: int
+    metrics: CaseMetrics
+
+
+@dataclass(frozen=True)
+class EvaluationCheckpoint:
+    """可从数据库恢复的已完成样本。"""
+
+    config_index: int
+    case_index: int
+    metrics: CaseMetrics

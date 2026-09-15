@@ -6,7 +6,7 @@ import pytest
 from app.evaluation.judge import JudgeResult, JudgeService
 from app.evaluation.ragas_adapter import RagasEvaluator, RagasScores
 from app.evaluation.runner import EvaluationRunner
-from app.evaluation.types import EvalCase, RetrievalConfig
+from app.evaluation.types import EvalCase, EvaluationProgress, RetrievalConfig
 from app.llm.base import (
     ChatResult,
     EmbeddingResult,
@@ -92,10 +92,17 @@ async def test_runner_handles_empty_retrieval_without_generation() -> None:
         judge=FailIfCalledJudge(),
         ragas_evaluator=StaticRagas(),
     )
-    progress: list[tuple[int, int]] = []
+    progress: list[tuple[int, int, int, int]] = []
 
-    async def report(completed: int, total: int) -> None:
-        progress.append((completed, total))
+    async def report(event: EvaluationProgress) -> None:
+        progress.append(
+            (
+                event.completed,
+                event.total,
+                event.config_index,
+                event.case_index,
+            )
+        )
 
     results = await runner.run(
         cast(AsyncSession, object()),
@@ -114,7 +121,7 @@ async def test_runner_handles_empty_retrieval_without_generation() -> None:
     assert results[0].recall_at_5 == 0
     assert results[0].mrr == 0
     assert results[0].cases[0].error == "empty retrieval result"
-    assert progress == [(0, 1), (1, 1)]
+    assert progress == [(1, 1, 0, 0)]
 
 
 class JudgeStubProvider(LLMProvider):

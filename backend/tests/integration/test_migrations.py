@@ -137,6 +137,8 @@ def test_initial_migration_upgrade_and_downgrade(
             "error_message",
             "started_at",
             "completed_at",
+            "attempt",
+            "checkpoint",
         }.issubset(evaluation_run_columns)
 
         command.downgrade(config, "base")

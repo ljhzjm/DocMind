@@ -40,7 +40,13 @@ class EvalRunRequest(BaseModel):
     configs: list[RetrievalConfigRequest] = Field(min_length=1, max_length=8)
 
 
-EvaluationRunStatus = Literal["queued", "running", "completed", "failed"]
+EvaluationRunStatus = Literal[
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+]
 
 
 class CaseMetricsResponse(BaseModel):
@@ -87,6 +93,7 @@ class EvaluationRunAcceptedResponse(BaseModel):
     dataset_name: str
     task_id: str
     status: EvaluationRunStatus
+    attempt: int
     progress_completed: int
     progress_total: int
 
@@ -96,6 +103,7 @@ class EvalRunResponse(BaseModel):
     dataset_name: str
     task_id: str | None
     status: EvaluationRunStatus
+    attempt: int
     progress_completed: int
     progress_total: int
     error_message: str | None
@@ -109,6 +117,7 @@ class EvaluationRunSummary(BaseModel):
     run_id: UUID
     dataset_name: str
     status: EvaluationRunStatus
+    attempt: int
     progress_completed: int
     progress_total: int
     created_at: str

@@ -4,7 +4,12 @@
 
 import { computed, onUnmounted, ref } from 'vue'
 
-import { fetchEvaluationRun, runEvaluation } from '../api/evaluation'
+import {
+  cancelEvaluationRun,
+  fetchEvaluationRun,
+  resumeEvaluationRun,
+  runEvaluation,
+} from '../api/evaluation'
 import type {
   EvalRunRequest,
   EvalRunResponse,
@@ -81,6 +86,26 @@ export function useEvaluationRun() {
     await refresh(runId)
   }
 
+  async function cancel(): Promise<void> {
+    if (run.value === null || !isActive.value) {
+      return
+    }
+    errorMessage.value = ''
+    stopPolling()
+    run.value = await cancelEvaluationRun(run.value.run_id)
+  }
+
+  async function resume(): Promise<void> {
+    if (run.value === null) {
+      return
+    }
+    errorMessage.value = ''
+    stopPolling()
+    const accepted = await resumeEvaluationRun(run.value.run_id)
+    activeRunId.value = accepted.run_id
+    await refresh(accepted.run_id)
+  }
+
   onUnmounted(stopPolling)
 
   return {
@@ -92,6 +117,8 @@ export function useEvaluationRun() {
     errorMessage,
     start,
     load,
+    cancel,
+    resume,
     stopPolling,
   }
 }

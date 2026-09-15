@@ -5,10 +5,18 @@ from app.core.redis import close_redis
 from app.db.session import get_async_engine, get_async_session_factory
 from app.evaluation.executor import execute_evaluation_run
 from app.evaluation.runner import EvaluationRunner, ProgressCallback
-from app.evaluation.types import ConfigMetrics, EvalCase, RetrievalConfig
+from app.evaluation.types import (
+    CaseMetrics,
+    ConfigMetrics,
+    EvalCase,
+    EvaluationCheckpoint,
+    EvaluationProgress,
+    RetrievalConfig,
+)
 from app.main import app
 from app.models.eval_dataset import EvalDatasetItem
 from app.models.evaluation_run import EvaluationRun
+from app.workers.celery_app import celery_app
 from app.workers.tasks import run_evaluation_task
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
@@ -28,12 +36,35 @@ class StaticEvaluationRunner(EvaluationRunner):
         cases: Sequence[EvalCase],
         configs: Sequence[RetrievalConfig],
         progress_callback: ProgressCallback | None = None,
+        checkpoint: Sequence[EvaluationCheckpoint] = (),
     ) -> list[ConfigMetrics]:
-        del session
+        del session, checkpoint
         total = len(cases) * len(configs)
+        case_metrics = CaseMetrics(
+            question=cases[0].question,
+            recall_at_5=1.0,
+            reciprocal_rank=1.0,
+            faithfulness=5.0,
+            answer_relevance=5.0,
+            ragas_faithfulness=1.0,
+            ragas_answer_relevance=1.0,
+            latency_ms=10.0,
+            first_token_latency_ms=5.0,
+            input_tokens=10,
+            output_tokens=5,
+            estimated_cost=0.001,
+            refused=False,
+        )
         if progress_callback is not None:
-            await progress_callback(0, total)
-            await progress_callback(total, total)
+            await progress_callback(
+                EvaluationProgress(
+                    completed=total,
+                    total=total,
+                    config_index=0,
+                    case_index=0,
+                    metrics=case_metrics,
+                )
+            )
         config = configs[0]
         return [
             ConfigMetrics(
@@ -52,7 +83,7 @@ class StaticEvaluationRunner(EvaluationRunner):
                 average_estimated_cost=0.001,
                 refusal_rate=0.0,
                 hallucination_risk=0.0,
-                cases=[],
+                cases=[case_metrics],
             )
         ]
 
@@ -62,13 +93,20 @@ async def test_run_endpoint_queues_without_waiting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     queued: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    revoked: list[tuple[str, bool]] = []
     monkeypatch.setattr(
         run_evaluation_task,
         "apply_async",
         lambda *args, **kwargs: queued.append((args, kwargs)),
     )
+    monkeypatch.setattr(
+        celery_app.control,
+        "revoke",
+        lambda task_id, terminate: revoked.append((task_id, terminate)),
+    )
     dataset_name = "async-api-test"
     try:
+        await _cleanup_dataset(dataset_name)
         async with get_async_session_factory()() as session:
             session.add(
                 EvalDatasetItem(
@@ -99,11 +137,24 @@ async def test_run_endpoint_queues_without_waiting(
                 },
             )
 
-        assert response.status_code == 202
-        payload = response.json()
-        assert payload["status"] == "queued"
-        assert payload["progress_total"] == 1
-        assert queued
+            assert response.status_code == 202
+            payload = response.json()
+            assert payload["status"] == "queued"
+            assert payload["attempt"] == 0
+            assert payload["progress_total"] == 1
+            assert queued
+
+            run_id = payload["run_id"]
+            cancelled = await client.post(f"/api/v1/eval/runs/{run_id}/cancel")
+            assert cancelled.status_code == 200
+            assert cancelled.json()["status"] == "cancelled"
+            assert revoked == [(payload["task_id"], False)]
+
+            resumed = await client.post(f"/api/v1/eval/runs/{run_id}/resume")
+            assert resumed.status_code == 202
+            assert resumed.json()["status"] == "queued"
+            assert resumed.json()["attempt"] == 1
+            assert len(queued) == 2
     finally:
         await _cleanup_dataset(dataset_name)
         await close_redis()

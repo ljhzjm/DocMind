@@ -145,6 +145,7 @@ PDF 由 PyMuPDF 按页提取，Markdown 按标题解析。切片器优先保留�
 - Redis 令牌桶按 API Key 或 IP + 会话限流，超额返回 `429` 和 `Retry-After`。
 - 评测任务投递到独立 `evaluation` 队列，API 立即返回 `202` 和 `run_id`，前端轮询进度；
   长时间评测不会阻塞文档解析 `ingestion` 队列。
+- 评测支持取消和失败续跑；每个完成样本写入 checkpoint，恢复时不会重复执行已完成样本。
 - 请求日志为结构化 JSON，响应包含 `X-Request-ID`；调试页可按 `trace_id` 回放。
 - `REQUIRE_API_KEY=true` 后，API 客户端携带 `X-API-Key`，浏览器通过登录页换取
   HttpOnly 会话 Cookie。

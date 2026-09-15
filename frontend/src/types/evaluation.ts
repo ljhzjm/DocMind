@@ -3,7 +3,8 @@
 // Vue 概念：结果表与样本明细复用同一份响应式数据。
 
 export type SearchMode = 'vector' | 'bm25' | 'hybrid'
-export type EvaluationRunStatus = 'queued' | 'running' | 'completed' | 'failed'
+export type EvaluationRunStatus =
+  'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface EvalDatasetSummary {
   dataset_name: string
@@ -62,6 +63,7 @@ export interface EvalRunResponse {
   dataset_name: string
   task_id: string | null
   status: EvaluationRunStatus
+  attempt: number
   progress_completed: number
   progress_total: number
   error_message: string | null
@@ -76,6 +78,7 @@ export interface EvaluationRunAccepted {
   dataset_name: string
   task_id: string
   status: EvaluationRunStatus
+  attempt: number
   progress_completed: number
   progress_total: number
 }
@@ -84,6 +87,7 @@ export interface EvaluationRunSummary {
   run_id: string
   dataset_name: string
   status: EvaluationRunStatus
+  attempt: number
   progress_completed: number
   progress_total: number
   created_at: string

@@ -15,6 +15,8 @@ from app.evaluation.types import (
     CaseMetrics,
     ConfigMetrics,
     EvalCase,
+    EvaluationCheckpoint,
+    EvaluationProgress,
     RetrievalConfig,
 )
 from app.rag.answer import AnswerGenerator, RAGGenerationError
@@ -22,7 +24,7 @@ from app.rag.rerank import RerankProvider, create_reranker
 from app.rag.types import AnswerDeltaEvent, DoneEvent, RAGContext
 from app.retrieval.service import SearchService
 
-ProgressCallback = Callable[[int, int], Awaitable[None]]
+ProgressCallback = Callable[[EvaluationProgress], Awaitable[None]]
 
 
 class EvaluationRunner:
@@ -52,44 +54,58 @@ class EvaluationRunner:
         cases: Sequence[EvalCase],
         configs: Sequence[RetrievalConfig],
         progress_callback: ProgressCallback | None = None,
+        checkpoint: Sequence[EvaluationCheckpoint] = (),
     ) -> list[ConfigMetrics]:
         total = len(cases) * len(configs)
-        completed = 0
-        if progress_callback is not None:
-            await progress_callback(0, total)
+        completed_by_config: dict[int, list[CaseMetrics]] = {}
+        for item in checkpoint:
+            completed_by_config.setdefault(item.config_index, []).append(item.metrics)
+        completed = sum(len(items) for items in completed_by_config.values())
 
         results: list[ConfigMetrics] = []
-        for config in configs:
+        for config_index, config in enumerate(configs):
+            config_results = completed_by_config.get(config_index, [])
             results.append(
                 await self._run_config(
                     session,
                     cases=cases,
                     config=config,
+                    completed_results=config_results,
                     on_case_complete=self._progress_reporter(
                         progress_callback,
+                        config_index=config_index,
                         completed=completed,
                         total=total,
                     ),
                 )
             )
-            completed += len(cases)
+            completed += len(cases) - len(config_results)
         return results
 
     @staticmethod
     def _progress_reporter(
         callback: ProgressCallback | None,
         *,
+        config_index: int,
         completed: int,
         total: int,
-    ) -> Callable[[], Awaitable[None]] | None:
+    ) -> Callable[[int, CaseMetrics], Awaitable[None]] | None:
         if callback is None:
             return None
         current = completed
 
-        async def report() -> None:
+        async def report(case_index: int, metrics: CaseMetrics) -> None:
             nonlocal current
             current += 1
-            await callback(current, total)
+            await callback(
+                EvaluationProgress(
+                    completed=current,
+                    total=total,
+                    config_index=config_index,
+                    case_index=case_index,
+                    metrics=metrics,
+                )
+            )
 
         return report
 
@@ -99,13 +115,17 @@ class EvaluationRunner:
         *,
         cases: Sequence[EvalCase],
         config: RetrievalConfig,
-        on_case_complete: Callable[[], Awaitable[None]] | None = None,
+        completed_results: Sequence[CaseMetrics] = (),
+        on_case_complete: Callable[[int, CaseMetrics], Awaitable[None]] | None = None,
     ) -> ConfigMetrics:
-        results: list[CaseMetrics] = []
-        for case in cases:
-            results.append(await self._run_case(session, case=case, config=config))
+        results = list(completed_results)
+        for case_index, case in enumerate(cases):
+            if case_index < len(completed_results):
+                continue
+            metrics = await self._run_case(session, case=case, config=config)
+            results.append(metrics)
             if on_case_complete is not None:
-                await on_case_complete()
+                await on_case_complete(case_index, metrics)
         ragas_faithfulness = [
             result.ragas_faithfulness for result in results if result.ragas_faithfulness is not None
         ]

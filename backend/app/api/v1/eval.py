@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -8,16 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_async_session
 from app.models.eval_dataset import EvalDatasetItem
+from app.models.evaluation_run import EvaluationRun
 from app.repositories.eval import (
     create_eval_case,
     list_eval_cases,
     list_eval_dataset_summaries,
 )
 from app.repositories.evaluation_runs import (
+    cancel_evaluation_run,
     create_evaluation_run,
     fail_evaluation_run,
     get_evaluation_run,
     list_evaluation_runs,
+    resume_evaluation_run,
 )
 from app.schemas.evaluation import (
     EvalCaseCreateRequest,
@@ -28,9 +32,11 @@ from app.schemas.evaluation import (
     EvaluationRunAcceptedResponse,
     EvaluationRunSummary,
 )
+from app.workers.celery_app import celery_app
 from app.workers.tasks import run_evaluation_task
 
 router = APIRouter(prefix="/eval", tags=["evaluation"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/datasets", response_model=list[EvalDatasetSummary])
@@ -121,6 +127,7 @@ async def run_evaluation(
         dataset_name=run.dataset_name,
         task_id=task_id,
         status="queued",
+        attempt=run.attempt,
         progress_completed=0,
         progress_total=progress_total,
     )
@@ -147,6 +154,7 @@ async def get_evaluation_runs(
             run_id=run.id,
             dataset_name=run.dataset_name,
             status=run.status,
+            attempt=run.attempt,
             progress_completed=run.progress_completed,
             progress_total=run.progress_total,
             created_at=run.created_at.isoformat(),
@@ -163,12 +171,90 @@ async def get_evaluation_run_detail(
     run = await get_evaluation_run(session, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="evaluation run not found")
+    return _run_response(run)
+
+
+@router.post("/runs/{run_id}/cancel", response_model=EvalRunResponse)
+async def cancel_evaluation_run_endpoint(
+    run_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EvalRunResponse:
+    """取消 queued/running 评测，并尽力终止正在执行的 Celery 任务。"""
+    run = await get_evaluation_run(session, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="evaluation run not found")
+    if run.status == "cancelled":
+        return _run_response(run)
+    if run.status not in {"queued", "running"}:
+        raise HTTPException(status_code=409, detail="evaluation run cannot be cancelled")
+
+    terminate = run.status == "running"
+    await cancel_evaluation_run(session, run_id)
+    try:
+        if run.task_id:
+            celery_app.control.revoke(run.task_id, terminate=terminate)
+    except (CeleryError, OperationalError, OSError):
+        logger.warning("evaluation task revoke failed", exc_info=True)
+
+    updated = await get_evaluation_run(session, run_id)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="evaluation run not found")
+    return _run_response(updated)
+
+
+@router.post(
+    "/runs/{run_id}/resume",
+    response_model=EvaluationRunAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def resume_evaluation_run_endpoint(
+    run_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EvaluationRunAcceptedResponse:
+    """从 checkpoint 恢复 failed/cancelled 评测。"""
+    run = await get_evaluation_run(session, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="evaluation run not found")
+    if run.status not in {"failed", "cancelled"}:
+        raise HTTPException(status_code=409, detail="evaluation run cannot be resumed")
+
+    task_id = f"evaluation-{run_id}-{uuid4().hex[:8]}"
+    resumed = await resume_evaluation_run(session, run_id, task_id=task_id)
+    if not resumed:
+        raise HTTPException(status_code=409, detail="evaluation run cannot be resumed")
+    await session.refresh(run)
+    try:
+        run_evaluation_task.apply_async(args=[str(run_id)], task_id=task_id)
+    except (CeleryError, OperationalError, OSError) as exc:
+        await fail_evaluation_run(
+            session,
+            run_id,
+            error_message="evaluation task could not be queued",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="evaluation task could not be queued",
+        ) from exc
+
+    return EvaluationRunAcceptedResponse(
+        run_id=run_id,
+        dataset_name=run.dataset_name,
+        task_id=task_id,
+        status="queued",
+        attempt=run.attempt,
+        progress_completed=run.progress_completed,
+        progress_total=run.progress_total,
+    )
+
+
+def _run_response(run: EvaluationRun) -> EvalRunResponse:
     return EvalRunResponse.model_validate(
         {
             "run_id": run.id,
             "dataset_name": run.dataset_name,
             "task_id": run.task_id,
             "status": run.status,
+            "attempt": run.attempt,
             "progress_completed": run.progress_completed,
             "progress_total": run.progress_total,
             "error_message": run.error_message,
