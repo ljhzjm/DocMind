@@ -6,6 +6,10 @@ from app.llm import LLMMessage, LLMProvider, LLMRouter, LLMTask, RoutedModel, cr
 from app.llm.base import FinishEvent, TextDeltaEvent, TokenUsage, UsageEvent
 from app.llm.cost import calculate_token_cost
 from app.rag.answer_stream import CitationFirstAnswerParser
+from app.rag.citation_validation import (
+    CitationSemanticValidator,
+    CitationValidationResult,
+)
 from app.rag.parsing import StructuredOutputError, parse_json_object
 from app.rag.prompts import render_prompt
 from app.rag.types import (
@@ -42,9 +46,11 @@ class AnswerGenerator:
         self,
         router: LLMRouter | None = None,
         provider: LLMProvider | None = None,
+        citation_validator: CitationSemanticValidator | None = None,
     ) -> None:
         self._router = router
         self._provider = provider
+        self._citation_validator = citation_validator or CitationSemanticValidator()
         self._route: RoutedModel | None = None
 
     def _get_route(self) -> RoutedModel:
@@ -106,14 +112,28 @@ class AnswerGenerator:
             )
             try:
                 answer = validate_answer(result.text, max_citation=len(contexts))
+                citation_validation = await self._citation_validator.validate(
+                    question=query,
+                    answer=answer.answer,
+                    contexts=contexts,
+                )
+                if not citation_validation.valid:
+                    raise CitationValidationError(
+                        "semantic citation validation failed: "
+                        + "; ".join(citation_validation.unsupported_sentences)
+                    )
+                usage = _combine_usage(result.usage, citation_validation.usage)
                 return GenerationOutcome(
                     answer=answer,
-                    usage=result.usage,
+                    usage=usage,
                     model_name=route.model_name,
-                    estimated_cost=calculate_token_cost(
-                        result.usage,
-                        input_cost_per_million=route.input_cost_per_million,
-                        output_cost_per_million=route.output_cost_per_million,
+                    estimated_cost=(
+                        calculate_token_cost(
+                            result.usage,
+                            input_cost_per_million=route.input_cost_per_million,
+                            output_cost_per_million=route.output_cost_per_million,
+                        )
+                        + citation_validation.estimated_cost
                     ),
                 )
             except (StructuredOutputError, ValidationError, CitationValidationError) as exc:
@@ -161,14 +181,23 @@ class AnswerGenerator:
                 answer = parser.finish()
                 if not answer.answer.strip():
                     raise CitationValidationError("answer must not be empty")
+                citation_validation = await self._validate_citations(
+                    query,
+                    answer,
+                    contexts,
+                )
+                usage = _combine_usage(stream_usage, citation_validation.usage)
                 yield DoneEvent(
                     citations=answer.citations,
-                    usage=stream_usage,
+                    usage=usage,
                     model_name=route.model_name,
-                    estimated_cost=calculate_token_cost(
-                        stream_usage,
-                        input_cost_per_million=route.input_cost_per_million,
-                        output_cost_per_million=route.output_cost_per_million,
+                    estimated_cost=(
+                        calculate_token_cost(
+                            stream_usage,
+                            input_cost_per_million=route.input_cost_per_million,
+                            output_cost_per_million=route.output_cost_per_million,
+                        )
+                        + citation_validation.estimated_cost
                     ),
                 )
                 return
@@ -184,6 +213,24 @@ class AnswerGenerator:
                 validation_error = str(exc)
 
         raise RAGGenerationError(f"model returned invalid citations after {attempts} attempts")
+
+    async def _validate_citations(
+        self,
+        query: str,
+        answer: RAGAnswer,
+        contexts: Sequence[RAGContext],
+    ) -> CitationValidationResult:
+        validation = await self._citation_validator.validate(
+            question=query,
+            answer=answer.answer,
+            contexts=contexts,
+        )
+        if not validation.valid:
+            raise CitationValidationError(
+                "semantic citation validation failed: "
+                + "; ".join(validation.unsupported_sentences)
+            )
+        return validation
 
     @staticmethod
     def _messages(
@@ -204,3 +251,11 @@ class AnswerGenerator:
                 ),
             )
         ]
+
+
+def _combine_usage(first: TokenUsage, second: TokenUsage) -> TokenUsage:
+    return TokenUsage(
+        input_tokens=first.input_tokens + second.input_tokens,
+        output_tokens=first.output_tokens + second.output_tokens,
+        total_tokens=first.total_tokens + second.total_tokens,
+    )

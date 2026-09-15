@@ -21,6 +21,16 @@ export interface EvalDatasetVersion {
   created_at: string
 }
 
+export interface RefusalThresholdCalibration {
+  mode: SearchMode
+  top_k: number
+  rerank_provider: string
+  threshold: number
+  sample_count: number
+  metrics: Record<string, number>
+  created_at: string
+}
+
 export interface RetrievalConfigInput {
   name: string
   mode: SearchMode

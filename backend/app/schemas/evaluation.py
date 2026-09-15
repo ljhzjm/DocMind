@@ -50,6 +50,21 @@ class EvalRunRequest(BaseModel):
     configs: list[RetrievalConfigRequest] = Field(min_length=1, max_length=8)
 
 
+class RefusalThresholdCalibrationRequest(BaseModel):
+    dataset_name: str = Field(min_length=1)
+    config: RetrievalConfigRequest
+
+
+class RefusalThresholdResponse(BaseModel):
+    mode: SearchMode
+    top_k: int
+    rerank_provider: str
+    threshold: float
+    sample_count: int
+    metrics: dict[str, float | int]
+    created_at: str
+
+
 EvaluationRunStatus = Literal[
     "queued",
     "running",

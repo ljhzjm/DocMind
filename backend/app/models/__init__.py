@@ -7,6 +7,7 @@ from app.models.eval_dataset import EvalDatasetItem
 from app.models.eval_dataset_version import EvalDatasetVersion
 from app.models.evaluation_run import EvaluationRun
 from app.models.knowledge_base import KnowledgeBaseRevision
+from app.models.retrieval_threshold import RetrievalThreshold
 from app.models.usage import UsageRecord
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "EvalDatasetVersion",
     "EvaluationRun",
     "KnowledgeBaseRevision",
+    "RetrievalThreshold",
     "Message",
     "UsageRecord",
 ]

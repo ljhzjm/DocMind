@@ -147,6 +147,8 @@ PDF 由 PyMuPDF 按页提取，Markdown 按标题解析。切片器优先保留�
   长时间评测不会阻塞文档解析 `ingestion` 队列。
 - 评测支持取消和失败续跑；每个完成样本写入 checkpoint，恢复时不会重复执行已完成样本。
 - 每次评测自动冻结数据集 revision、完整样本快照和知识库 revision，后续编辑不会改变历史运行。
+- 生成结果会再经过逐句引用语义校验；无证据支持的答案不会完成持久化或进入缓存。
+- 可通过评测集校准各 `mode + top_k + reranker` 组合的拒答阈值，运行时优先使用校准值。
 - 请求日志为结构化 JSON，响应包含 `X-Request-ID`；调试页可按 `trace_id` 回放。
 - `REQUIRE_API_KEY=true` 后，API 客户端携带 `X-API-Key`，浏览器通过登录页换取
   HttpOnly 会话 Cookie。

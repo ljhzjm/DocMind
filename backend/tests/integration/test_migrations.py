@@ -55,6 +55,7 @@ def test_initial_migration_upgrade_and_downgrade(
             "messages",
             "knowledge_base_revision",
             "usage_records",
+            "retrieval_thresholds",
         }.issubset(inspector.get_table_names())
 
         with engine.connect() as connection:

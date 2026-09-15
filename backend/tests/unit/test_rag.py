@@ -22,6 +22,10 @@ from app.rag.answer import (
     RAGGenerationError,
     validate_answer,
 )
+from app.rag.citation_validation import (
+    CitationSemanticValidator,
+    CitationValidationResult,
+)
 from app.rag.pipeline import RAGPipeline
 from app.rag.query_rewrite import QueryRewriter, RewriteResult
 from app.rag.rerank import PassthroughReranker
@@ -81,6 +85,51 @@ class StubLLMProvider(LLMProvider):
         raise NotImplementedError
 
 
+class StubCitationValidator(CitationSemanticValidator):
+    def __init__(self, *, valid: bool = True) -> None:
+        self.valid = valid
+
+    async def validate(
+        self,
+        *,
+        question: str,
+        answer: str,
+        contexts: Sequence[RAGContext],
+    ) -> CitationValidationResult:
+        del question, contexts
+        return CitationValidationResult(
+            valid=self.valid,
+            unsupported_sentences=() if self.valid else (answer,),
+            usage=TokenUsage(),
+            model_name="stub-validator",
+            estimated_cost=0.0,
+        )
+
+
+class SequencedCitationValidator(CitationSemanticValidator):
+    def __init__(self, results: Sequence[bool]) -> None:
+        self.results = list(results)
+        self.calls = 0
+
+    async def validate(
+        self,
+        *,
+        question: str,
+        answer: str,
+        contexts: Sequence[RAGContext],
+    ) -> CitationValidationResult:
+        del question, contexts
+        valid = self.results[self.calls]
+        self.calls += 1
+        return CitationValidationResult(
+            valid=valid,
+            unsupported_sentences=() if valid else (answer,),
+            usage=TokenUsage(),
+            model_name="stub-validator",
+            estimated_cost=0.0,
+        )
+
+
 class NoopTraceRecorder(TraceRecorder):
     async def record(
         self,
@@ -119,6 +168,16 @@ class EmptyAnswerCache(AnswerCache):
 async def fake_version_provider(session: object) -> str:
     del session
     return "test-version"
+
+
+async def fixed_threshold_provider(
+    session: object,
+    mode: str,
+    top_k: int,
+    rerank_enabled: bool,
+) -> float:
+    del session, mode, top_k, rerank_enabled
+    return 0.5
 
 
 def context() -> RAGContext:
@@ -165,7 +224,10 @@ async def test_answer_generator_retries_once_after_invalid_citation() -> None:
             '{"answer":"Valid [1]","citations":[1]}',
         ]
     )
-    generator = AnswerGenerator(provider=provider)
+    generator = AnswerGenerator(
+        provider=provider,
+        citation_validator=StubCitationValidator(),
+    )
 
     answer = await generator.generate("question", [context()])
 
@@ -185,6 +247,26 @@ async def test_answer_generator_fails_after_retry_budget() -> None:
 
     with pytest.raises(RAGGenerationError):
         await AnswerGenerator(provider=provider).generate("question", [context()])
+
+
+@pytest.mark.asyncio
+async def test_answer_generator_retries_semantically_unsupported_citations() -> None:
+    provider = StubLLMProvider(
+        [
+            '{"answer":"Unsupported [1]","citations":[1]}',
+            '{"answer":"Supported [1]","citations":[1]}',
+        ]
+    )
+    validator = SequencedCitationValidator([False, True])
+
+    answer = await AnswerGenerator(
+        provider=provider,
+        citation_validator=validator,
+    ).generate("question", [context()])
+
+    assert provider.calls == 2
+    assert validator.calls == 2
+    assert answer.answer == "Supported [1]"
 
 
 class FixedSearchService(SearchService):
@@ -248,6 +330,7 @@ async def test_pipeline_refuses_low_score_without_generation() -> None:
         answer_cache=EmptyAnswerCache(),
         trace_recorder=NoopTraceRecorder(),
         knowledge_base_version_provider=fake_version_provider,
+        refusal_threshold_provider=fixed_threshold_provider,
     )
 
     events = [event async for event in pipeline.stream(cast(AsyncSession, object()), "question")]
@@ -295,7 +378,11 @@ async def test_answer_generator_streams_only_after_valid_citations() -> None:
     )
 
     events = [
-        event async for event in AnswerGenerator(provider=provider).stream("question", [context()])
+        event
+        async for event in AnswerGenerator(
+            provider=provider,
+            citation_validator=StubCitationValidator(),
+        ).stream("question", [context()])
     ]
     deltas = [event.delta for event in events if isinstance(event, AnswerDeltaEvent)]
 

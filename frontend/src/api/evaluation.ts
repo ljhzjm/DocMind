@@ -9,6 +9,8 @@ import type {
   EvaluationRunAccepted,
   EvalRunResponse,
   EvaluationRunSummary,
+  RefusalThresholdCalibration,
+  RetrievalConfigInput,
 } from '../types/evaluation'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(
@@ -103,4 +105,29 @@ export async function resumeEvaluationRun(
     throw new Error(`恢复评测失败：${response.status}`)
   }
   return (await response.json()) as EvaluationRunAccepted
+}
+
+export async function fetchRefusalThresholds(): Promise<
+  RefusalThresholdCalibration[]
+> {
+  const response = await fetch(`${EVAL_URL}/thresholds`)
+  if (!response.ok) {
+    throw new Error(`拒答阈值请求失败：${response.status}`)
+  }
+  return (await response.json()) as RefusalThresholdCalibration[]
+}
+
+export async function calibrateRefusalThreshold(
+  datasetName: string,
+  config: RetrievalConfigInput,
+): Promise<RefusalThresholdCalibration> {
+  const response = await fetch(`${EVAL_URL}/thresholds/calibrate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dataset_name: datasetName, config }),
+  })
+  if (!response.ok) {
+    throw new Error(`拒答阈值校准失败：${response.status}`)
+  }
+  return (await response.json()) as RefusalThresholdCalibration
 }

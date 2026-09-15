@@ -14,13 +14,19 @@ import {
 } from 'element-plus'
 import { Ban, Play, Plus, RefreshCcw, Trash2 } from 'lucide-vue-next'
 
-import { fetchEvalDatasets, fetchEvaluationRuns } from '../api/evaluation'
+import {
+  fetchEvalDatasets,
+  fetchEvaluationRuns,
+  fetchRefusalThresholds,
+} from '../api/evaluation'
 import EvaluationDatasetVersion from '../components/EvaluationDatasetVersion.vue'
 import EvaluationResults from '../components/EvaluationResults.vue'
+import EvaluationThresholdCell from '../components/EvaluationThresholdCell.vue'
 import { useEvaluationRun } from '../composables/useEvaluationRun'
 import type {
   EvalDatasetSummary,
   EvaluationRunSummary,
+  RefusalThresholdCalibration,
   RetrievalConfigInput,
 } from '../types/evaluation'
 
@@ -29,6 +35,7 @@ const datasetName = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 const evaluationRuns = ref<EvaluationRunSummary[]>([])
+const thresholds = ref<RefusalThresholdCalibration[]>([])
 const selectedRunId = ref('')
 const evaluationRun = useEvaluationRun()
 const canResume = computed(
@@ -63,6 +70,7 @@ onMounted(async () => {
   try {
     datasets.value = await fetchEvalDatasets()
     evaluationRuns.value = await fetchEvaluationRuns()
+    thresholds.value = await fetchRefusalThresholds()
     datasetName.value = datasets.value[0]?.dataset_name ?? ''
   } catch (error: unknown) {
     errorMessage.value =
@@ -106,6 +114,33 @@ function addConfig(): void {
 }
 function removeConfig(index: number): void {
   configs.value.splice(index, 1)
+}
+
+function thresholdFor(
+  config: RetrievalConfigInput,
+): RefusalThresholdCalibration | undefined {
+  return thresholds.value.find(
+    (item) =>
+      item.mode === config.mode &&
+      item.top_k === config.top_k &&
+      (config.rerank
+        ? item.rerank_provider !== 'none'
+        : item.rerank_provider === 'none'),
+  )
+}
+
+function updateThreshold(calibrated: RefusalThresholdCalibration): void {
+  thresholds.value = [
+    ...thresholds.value.filter(
+      (item) =>
+        !(
+          item.mode === calibrated.mode &&
+          item.top_k === calibrated.top_k &&
+          item.rerank_provider === calibrated.rerank_provider
+        ),
+    ),
+    calibrated,
+  ]
 }
 async function run(): Promise<void> {
   if (datasetName.value.length === 0 || configs.value.length === 0) {
@@ -217,6 +252,13 @@ async function primaryAction(): Promise<void> {
           重排
           <ElSwitch v-model="config.rerank" />
         </label>
+        <EvaluationThresholdCell
+          :dataset-name="datasetName"
+          :config="config"
+          :threshold="thresholdFor(config)"
+          @calibrated="updateThreshold"
+          @error="errorMessage = $event"
+        />
         <ElButton
           :icon="Trash2"
           circle

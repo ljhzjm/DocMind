@@ -64,7 +64,7 @@
 
 .config-row {
   display: grid;
-  grid-template-columns: minmax(10rem, 1.4fr) 9rem 7rem 7rem auto;
+  grid-template-columns: minmax(10rem, 1.4fr) 9rem 7rem 7rem 10rem auto;
   border-top: 1px solid #e2eaeb;
   padding-top: 0.75rem;
 }

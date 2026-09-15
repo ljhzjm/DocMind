@@ -19,6 +19,7 @@ from app.observability.context import trace_id_context
 from app.observability.trace import TraceRecorder
 from app.rag.answer import AnswerGenerator, RAGGenerationError
 from app.rag.query_rewrite import QueryRewriter
+from app.rag.refusal import get_effective_refusal_threshold
 from app.rag.rerank import RerankConfigurationError, RerankProvider, create_reranker
 from app.rag.types import (
     AnswerDeltaEvent,
@@ -34,6 +35,7 @@ from app.retrieval.types import RetrievalHit, SearchMode
 
 _REFUSAL_ANSWER = "未找到相关资料"
 KnowledgeBaseVersionProvider = Callable[[AsyncSession], Awaitable[str]]
+RefusalThresholdProvider = Callable[[AsyncSession, str, int, bool], Awaitable[float]]
 
 
 class RAGPipeline:
@@ -50,6 +52,7 @@ class RAGPipeline:
         answer_cache: AnswerCache | None = None,
         trace_recorder: TraceRecorder | None = None,
         knowledge_base_version_provider: KnowledgeBaseVersionProvider | None = None,
+        refusal_threshold_provider: RefusalThresholdProvider | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._search_service = search_service or SearchService()
@@ -60,6 +63,9 @@ class RAGPipeline:
         self._trace_recorder = trace_recorder or TraceRecorder()
         self._knowledge_base_version_provider = (
             knowledge_base_version_provider or knowledge_base_version
+        )
+        self._refusal_threshold_provider = (
+            refusal_threshold_provider or self._default_refusal_threshold
         )
 
     async def stream(
@@ -160,7 +166,13 @@ class RAGPipeline:
                 trace_id=active_trace_id,
             )
 
-            if not reranked or reranked[0].score < self._settings.rag_refusal_threshold:
+            refusal_threshold = await self._refusal_threshold_provider(
+                session,
+                search_mode.value,
+                effective_top_k,
+                (self._settings.rerank_enabled and self._settings.rerank_provider != "passthrough"),
+            )
+            if not reranked or reranked[0].score < refusal_threshold:
                 await self._answer_cache.set(
                     key,
                     CachedAnswer(
@@ -353,3 +365,18 @@ class RAGPipeline:
     @staticmethod
     def _elapsed_ms(started_at: float) -> float:
         return round((perf_counter() - started_at) * 1000, 3)
+
+    async def _default_refusal_threshold(
+        self,
+        session: AsyncSession,
+        mode: str,
+        top_k: int,
+        rerank_enabled: bool,
+    ) -> float:
+        return await get_effective_refusal_threshold(
+            session,
+            self._settings,
+            mode=mode,
+            top_k=top_k,
+            rerank_enabled=rerank_enabled,
+        )
