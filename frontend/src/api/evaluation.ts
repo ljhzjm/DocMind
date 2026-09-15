@@ -4,6 +4,7 @@
 
 import type {
   EvalDatasetSummary,
+  EvalDatasetVersion,
   EvalRunRequest,
   EvaluationRunAccepted,
   EvalRunResponse,
@@ -22,6 +23,31 @@ export async function fetchEvalDatasets(): Promise<EvalDatasetSummary[]> {
     throw new Error(`数据集请求失败：${response.status}`)
   }
   return (await response.json()) as EvalDatasetSummary[]
+}
+
+export async function fetchEvalDatasetVersions(
+  datasetName: string,
+): Promise<EvalDatasetVersion[]> {
+  const response = await fetch(
+    `${EVAL_URL}/datasets/${encodeURIComponent(datasetName)}/versions`,
+  )
+  if (!response.ok) {
+    throw new Error(`数据集版本请求失败：${response.status}`)
+  }
+  return (await response.json()) as EvalDatasetVersion[]
+}
+
+export async function freezeEvalDatasetVersion(
+  datasetName: string,
+): Promise<EvalDatasetVersion> {
+  const response = await fetch(
+    `${EVAL_URL}/datasets/${encodeURIComponent(datasetName)}/versions`,
+    { method: 'POST' },
+  )
+  if (!response.ok) {
+    throw new Error(`数据集冻结失败：${response.status}`)
+  }
+  return (await response.json()) as EvalDatasetVersion
 }
 
 export async function runEvaluation(

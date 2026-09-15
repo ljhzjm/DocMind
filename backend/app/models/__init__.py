@@ -4,6 +4,7 @@ from app.models.chunk_term import ChunkTerm
 from app.models.conversation import Conversation, Message
 from app.models.document import Chunk, Document
 from app.models.eval_dataset import EvalDatasetItem
+from app.models.eval_dataset_version import EvalDatasetVersion
 from app.models.evaluation_run import EvaluationRun
 from app.models.knowledge_base import KnowledgeBaseRevision
 from app.models.usage import UsageRecord
@@ -14,6 +15,7 @@ __all__ = [
     "Conversation",
     "Document",
     "EvalDatasetItem",
+    "EvalDatasetVersion",
     "EvaluationRun",
     "KnowledgeBaseRevision",
     "Message",

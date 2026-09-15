@@ -48,6 +48,7 @@ def test_initial_migration_upgrade_and_downgrade(
             "documents",
             "chunks",
             "eval_dataset",
+            "eval_dataset_versions",
             "evaluation_runs",
             "chunk_terms",
             "conversations",
@@ -139,6 +140,10 @@ def test_initial_migration_upgrade_and_downgrade(
             "completed_at",
             "attempt",
             "checkpoint",
+            "dataset_version_id",
+            "dataset_revision",
+            "dataset_snapshot",
+            "knowledge_base_revision",
         }.issubset(evaluation_run_columns)
 
         command.downgrade(config, "base")

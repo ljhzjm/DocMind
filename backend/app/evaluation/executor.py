@@ -12,6 +12,7 @@ from app.evaluation.types import (
     RetrievalConfig,
 )
 from app.repositories.eval import list_eval_cases
+from app.repositories.eval_versions import dataset_snapshot
 from app.repositories.evaluation_runs import (
     complete_evaluation_run,
     fail_evaluation_run,
@@ -43,16 +44,18 @@ async def execute_evaluation_run(
         if run.status in {"completed", "cancelled"}:
             return
 
-        stored_cases = await list_eval_cases(session, run.dataset_name)
+        snapshot = run.dataset_snapshot
+        if snapshot is None:
+            snapshot = dataset_snapshot(await list_eval_cases(session, run.dataset_name))
         cases = [
             EvalCase(
-                id=case.id,
-                question=case.question,
-                reference_answer=case.reference_answer,
-                expected_chunk_ids=tuple(case.expected_chunk_ids),
-                tags=tuple(case.tags),
+                id=UUID(case["id"]),
+                question=str(case["question"]),
+                reference_answer=str(case["reference_answer"]),
+                expected_chunk_ids=tuple(UUID(chunk_id) for chunk_id in case["expected_chunk_ids"]),
+                tags=tuple(str(tag) for tag in case["tags"]),
             )
-            for case in stored_cases
+            for case in snapshot
         ]
         configs = [
             RetrievalConfig(

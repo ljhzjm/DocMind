@@ -16,6 +16,10 @@ async def create_evaluation_run(
     configs: list[dict[str, Any]],
     task_id: str,
     progress_total: int,
+    dataset_version_id: UUID | None = None,
+    dataset_revision: int | None = None,
+    dataset_snapshot: list[dict[str, Any]] | None = None,
+    knowledge_base_revision: int = 0,
     results: list[dict[str, Any]] | None = None,
 ) -> EvaluationRun:
     run = EvaluationRun(
@@ -24,6 +28,10 @@ async def create_evaluation_run(
         configs=configs,
         task_id=task_id,
         progress_total=progress_total,
+        dataset_version_id=dataset_version_id,
+        dataset_revision=dataset_revision,
+        dataset_snapshot=dataset_snapshot,
+        knowledge_base_revision=knowledge_base_revision,
         results=results or [],
     )
     session.add(run)

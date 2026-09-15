@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from uuid import UUID, uuid4
 
 import pytest
 from app.core.redis import close_redis
@@ -15,6 +16,7 @@ from app.evaluation.types import (
 )
 from app.main import app
 from app.models.eval_dataset import EvalDatasetItem
+from app.models.eval_dataset_version import EvalDatasetVersion
 from app.models.evaluation_run import EvaluationRun
 from app.workers.celery_app import celery_app
 from app.workers.tasks import run_evaluation_task
@@ -27,7 +29,7 @@ pytestmark = pytest.mark.integration
 
 class StaticEvaluationRunner(EvaluationRunner):
     def __init__(self) -> None:
-        pass
+        self.questions: list[str] = []
 
     async def run(
         self,
@@ -39,6 +41,7 @@ class StaticEvaluationRunner(EvaluationRunner):
         checkpoint: Sequence[EvaluationCheckpoint] = (),
     ) -> list[ConfigMetrics]:
         del session, checkpoint
+        self.questions.extend(case.question for case in cases)
         total = len(cases) * len(configs)
         case_metrics = CaseMetrics(
             question=cases[0].question,
@@ -145,6 +148,12 @@ async def test_run_endpoint_queues_without_waiting(
             assert queued
 
             run_id = payload["run_id"]
+            async with get_async_session_factory()() as session:
+                stored_run = await session.get(EvaluationRun, UUID(run_id))
+                assert stored_run is not None
+                assert stored_run.dataset_revision == 1
+                assert stored_run.dataset_snapshot is not None
+                assert stored_run.dataset_snapshot[0]["question"] == "测试问题"
             cancelled = await client.post(f"/api/v1/eval/runs/{run_id}/cancel")
             assert cancelled.status_code == 200
             assert cancelled.json()["status"] == "cancelled"
@@ -164,12 +173,13 @@ async def test_run_endpoint_queues_without_waiting(
 @pytest.mark.asyncio
 async def test_executor_persists_progress_results_and_completion() -> None:
     dataset_name = "async-executor-test"
+    snapshot_question = "快照中的原始问题"
     try:
         async with get_async_session_factory()() as session:
             session.add(
                 EvalDatasetItem(
                     dataset_name=dataset_name,
-                    question="执行器问题",
+                    question="数据库中已被修改的问题",
                     reference_answer="执行器答案",
                     expected_chunk_ids=[],
                     tags=[],
@@ -182,6 +192,16 @@ async def test_executor_persists_progress_results_and_completion() -> None:
                 status="queued",
                 progress_completed=0,
                 progress_total=1,
+                dataset_revision=1,
+                dataset_snapshot=[
+                    {
+                        "id": str(uuid4()),
+                        "question": snapshot_question,
+                        "reference_answer": "执行器答案",
+                        "expected_chunk_ids": [],
+                        "tags": [],
+                    }
+                ],
                 configs=[
                     {
                         "name": "vector",
@@ -196,7 +216,8 @@ async def test_executor_persists_progress_results_and_completion() -> None:
             await session.commit()
             run_id = run.id
 
-        await execute_evaluation_run(run_id, runner=StaticEvaluationRunner())
+        runner = StaticEvaluationRunner()
+        await execute_evaluation_run(run_id, runner=runner)
         async with get_async_session_factory()() as session:
             stored = await session.get(EvaluationRun, run_id)
             assert stored is not None
@@ -204,6 +225,7 @@ async def test_executor_persists_progress_results_and_completion() -> None:
             assert stored.progress_completed == 1
             assert stored.progress_total == 1
             assert stored.results[0]["name"] == "vector"
+        assert runner.questions == [snapshot_question]
     finally:
         await _cleanup_dataset(dataset_name)
         await get_async_engine().dispose()
@@ -211,6 +233,9 @@ async def test_executor_persists_progress_results_and_completion() -> None:
 
 async def _cleanup_dataset(dataset_name: str) -> None:
     async with get_async_session_factory()() as session:
+        await session.execute(
+            delete(EvalDatasetVersion).where(EvalDatasetVersion.dataset_name == dataset_name)
+        )
         await session.execute(
             delete(EvaluationRun).where(EvaluationRun.dataset_name == dataset_name)
         )

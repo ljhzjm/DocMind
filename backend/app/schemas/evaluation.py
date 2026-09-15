@@ -11,6 +11,16 @@ class EvalDatasetSummary(BaseModel):
     case_count: int
 
 
+class EvalDatasetVersionResponse(BaseModel):
+    id: UUID
+    dataset_name: str
+    revision: int
+    content_hash: str
+    case_count: int
+    created_by: str
+    created_at: str
+
+
 class EvalCaseResponse(BaseModel):
     id: UUID
     question: str
@@ -94,6 +104,7 @@ class EvaluationRunAcceptedResponse(BaseModel):
     task_id: str
     status: EvaluationRunStatus
     attempt: int
+    dataset_revision: int | None
     progress_completed: int
     progress_total: int
 
@@ -104,6 +115,8 @@ class EvalRunResponse(BaseModel):
     task_id: str | None
     status: EvaluationRunStatus
     attempt: int
+    dataset_revision: int | None
+    knowledge_base_revision: int
     progress_completed: int
     progress_total: int
     error_message: str | None
@@ -118,6 +131,8 @@ class EvaluationRunSummary(BaseModel):
     dataset_name: str
     status: EvaluationRunStatus
     attempt: int
+    dataset_revision: int | None
+    knowledge_base_revision: int
     progress_completed: int
     progress_total: int
     created_at: str

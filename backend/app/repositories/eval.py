@@ -29,7 +29,7 @@ async def list_eval_cases(
     result = await session.scalars(
         select(EvalDatasetItem)
         .where(EvalDatasetItem.dataset_name == dataset_name)
-        .order_by(EvalDatasetItem.created_at)
+        .order_by(EvalDatasetItem.created_at, EvalDatasetItem.id)
     )
     return list(result.all())
 

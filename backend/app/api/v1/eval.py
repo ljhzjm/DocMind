@@ -15,6 +15,7 @@ from app.repositories.eval import (
     list_eval_cases,
     list_eval_dataset_summaries,
 )
+from app.repositories.eval_versions import ensure_dataset_version
 from app.repositories.evaluation_runs import (
     cancel_evaluation_run,
     create_evaluation_run,
@@ -23,6 +24,7 @@ from app.repositories.evaluation_runs import (
     list_evaluation_runs,
     resume_evaluation_run,
 )
+from app.repositories.knowledge_base import get_knowledge_base_revision
 from app.schemas.evaluation import (
     EvalCaseCreateRequest,
     EvalCaseResponse,
@@ -98,12 +100,22 @@ async def run_evaluation(
     run_id = uuid4()
     task_id = f"evaluation-{run_id}"
     progress_total = len(stored_cases) * len(request.configs)
+    dataset_version = await ensure_dataset_version(
+        session,
+        dataset_name=request.dataset_name,
+        created_by="evaluation-run",
+    )
+    knowledge_base_revision = await get_knowledge_base_revision(session)
     run = await create_evaluation_run(
         session,
         run_id=run_id,
         dataset_name=request.dataset_name,
         task_id=task_id,
         progress_total=progress_total,
+        dataset_version_id=dataset_version.id,
+        dataset_revision=dataset_version.revision,
+        dataset_snapshot=dataset_version.snapshot,
+        knowledge_base_revision=knowledge_base_revision,
         configs=[config.model_dump(mode="json") for config in request.configs],
     )
     try:
@@ -128,6 +140,7 @@ async def run_evaluation(
         task_id=task_id,
         status="queued",
         attempt=run.attempt,
+        dataset_revision=dataset_version.revision,
         progress_completed=0,
         progress_total=progress_total,
     )
@@ -155,6 +168,8 @@ async def get_evaluation_runs(
             dataset_name=run.dataset_name,
             status=run.status,
             attempt=run.attempt,
+            dataset_revision=run.dataset_revision,
+            knowledge_base_revision=run.knowledge_base_revision,
             progress_completed=run.progress_completed,
             progress_total=run.progress_total,
             created_at=run.created_at.isoformat(),
@@ -242,6 +257,7 @@ async def resume_evaluation_run_endpoint(
         task_id=task_id,
         status="queued",
         attempt=run.attempt,
+        dataset_revision=run.dataset_revision,
         progress_completed=run.progress_completed,
         progress_total=run.progress_total,
     )
@@ -255,6 +271,8 @@ def _run_response(run: EvaluationRun) -> EvalRunResponse:
             "task_id": run.task_id,
             "status": run.status,
             "attempt": run.attempt,
+            "dataset_revision": run.dataset_revision,
+            "knowledge_base_revision": run.knowledge_base_revision,
             "progress_completed": run.progress_completed,
             "progress_total": run.progress_total,
             "error_message": run.error_message,

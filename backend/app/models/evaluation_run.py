@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -45,6 +46,21 @@ class EvaluationRun(Base):
     )
     dataset_name: Mapped[str] = mapped_column(String(255), nullable=False)
     task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dataset_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("eval_dataset_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    dataset_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    knowledge_base_revision: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+    )
+    dataset_snapshot: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,

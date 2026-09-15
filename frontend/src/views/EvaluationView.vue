@@ -15,6 +15,7 @@ import {
 import { Ban, Play, Plus, RefreshCcw, Trash2 } from 'lucide-vue-next'
 
 import { fetchEvalDatasets, fetchEvaluationRuns } from '../api/evaluation'
+import EvaluationDatasetVersion from '../components/EvaluationDatasetVersion.vue'
 import EvaluationResults from '../components/EvaluationResults.vue'
 import { useEvaluationRun } from '../composables/useEvaluationRun'
 import type {
@@ -179,6 +180,10 @@ async function primaryAction(): Promise<void> {
           />
         </ElSelect>
         <ElButton :icon="Plus" @click="addConfig">添加配置</ElButton>
+        <EvaluationDatasetVersion
+          :dataset-name="datasetName"
+          @error="errorMessage = $event"
+        />
       </div>
 
       <div class="history-row">
@@ -191,7 +196,7 @@ async function primaryAction(): Promise<void> {
           <ElOption
             v-for="runItem in evaluationRuns"
             :key="runItem.run_id"
-            :label="`${runItem.dataset_name} · ${runItem.status} · ${new Date(runItem.created_at).toLocaleString()}`"
+            :label="`${runItem.dataset_name} · v${runItem.dataset_revision ?? '-'} · ${runItem.status} · ${new Date(runItem.created_at).toLocaleString()}`"
             :value="runItem.run_id"
           />
         </ElSelect>

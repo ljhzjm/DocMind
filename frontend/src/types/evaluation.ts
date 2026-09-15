@@ -11,6 +11,16 @@ export interface EvalDatasetSummary {
   case_count: number
 }
 
+export interface EvalDatasetVersion {
+  id: string
+  dataset_name: string
+  revision: number
+  content_hash: string
+  case_count: number
+  created_by: string
+  created_at: string
+}
+
 export interface RetrievalConfigInput {
   name: string
   mode: SearchMode
@@ -64,6 +74,8 @@ export interface EvalRunResponse {
   task_id: string | null
   status: EvaluationRunStatus
   attempt: number
+  dataset_revision: number | null
+  knowledge_base_revision: number
   progress_completed: number
   progress_total: number
   error_message: string | null
@@ -79,6 +91,7 @@ export interface EvaluationRunAccepted {
   task_id: string
   status: EvaluationRunStatus
   attempt: number
+  dataset_revision: number | null
   progress_completed: number
   progress_total: number
 }
@@ -88,6 +101,8 @@ export interface EvaluationRunSummary {
   dataset_name: string
   status: EvaluationRunStatus
   attempt: number
+  dataset_revision: number | null
+  knowledge_base_revision: number
   progress_completed: number
   progress_total: number
   created_at: string
