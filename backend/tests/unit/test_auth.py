@@ -77,7 +77,8 @@ def test_login_cookie_protects_api_and_logout(
     )
     application = create_app()
 
-    with TestClient(application) as client:
+    client = TestClient(application)
+    try:
         assert client.get("/api/v1/search?q=test").status_code == 401
         login = client.post(
             "/api/auth/session",
@@ -88,6 +89,8 @@ def test_login_cookie_protects_api_and_logout(
         assert client.get("/api/auth/session").json()["authenticated"] is True
         assert client.delete("/api/auth/session").status_code == 204
         assert client.get("/api/auth/session").json()["authenticated"] is False
+    finally:
+        client.close()
 
 
 class RecordingLimiter:

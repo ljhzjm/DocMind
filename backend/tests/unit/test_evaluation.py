@@ -92,6 +92,10 @@ async def test_runner_handles_empty_retrieval_without_generation() -> None:
         judge=FailIfCalledJudge(),
         ragas_evaluator=StaticRagas(),
     )
+    progress: list[tuple[int, int]] = []
+
+    async def report(completed: int, total: int) -> None:
+        progress.append((completed, total))
 
     results = await runner.run(
         cast(AsyncSession, object()),
@@ -104,11 +108,13 @@ async def test_runner_handles_empty_retrieval_without_generation() -> None:
                 rerank=False,
             )
         ],
+        progress_callback=report,
     )
 
     assert results[0].recall_at_5 == 0
     assert results[0].mrr == 0
     assert results[0].cases[0].error == "empty retrieval result"
+    assert progress == [(0, 1), (1, 1)]
 
 
 class JudgeStubProvider(LLMProvider):

@@ -13,8 +13,16 @@ celery_app = Celery(
 )
 celery_app.conf.update(
     accept_content=["json"],
+    task_default_queue="ingestion",
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
     enable_utc=True,
+    worker_prefetch_multiplier=1,
     result_serializer="json",
+    task_routes={
+        "docmind.evaluation.run": {"queue": "evaluation"},
+        "docmind.ingestion.*": {"queue": "ingestion"},
+    },
     task_serializer="json",
     task_track_started=True,
     timezone="UTC",

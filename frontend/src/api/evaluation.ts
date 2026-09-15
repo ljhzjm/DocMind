@@ -5,6 +5,7 @@
 import type {
   EvalDatasetSummary,
   EvalRunRequest,
+  EvaluationRunAccepted,
   EvalRunResponse,
   EvaluationRunSummary,
 } from '../types/evaluation'
@@ -25,7 +26,7 @@ export async function fetchEvalDatasets(): Promise<EvalDatasetSummary[]> {
 
 export async function runEvaluation(
   request: EvalRunRequest,
-): Promise<EvalRunResponse> {
+): Promise<EvaluationRunAccepted> {
   const response = await fetch(`${EVAL_URL}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -34,7 +35,7 @@ export async function runEvaluation(
   if (!response.ok) {
     throw new Error(`评测运行失败：${response.status}`)
   }
-  return (await response.json()) as EvalRunResponse
+  return (await response.json()) as EvaluationRunAccepted
 }
 export async function fetchEvaluationRuns(): Promise<EvaluationRunSummary[]> {
   const response = await fetch(`${EVAL_URL}/runs`)

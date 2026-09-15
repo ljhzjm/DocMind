@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from time import perf_counter
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,8 @@ from app.rag.answer import AnswerGenerator, RAGGenerationError
 from app.rag.rerank import RerankProvider, create_reranker
 from app.rag.types import AnswerDeltaEvent, DoneEvent, RAGContext
 from app.retrieval.service import SearchService
+
+ProgressCallback = Callable[[int, int], Awaitable[None]]
 
 
 class EvaluationRunner:
@@ -49,8 +51,47 @@ class EvaluationRunner:
         *,
         cases: Sequence[EvalCase],
         configs: Sequence[RetrievalConfig],
+        progress_callback: ProgressCallback | None = None,
     ) -> list[ConfigMetrics]:
-        return [await self._run_config(session, cases=cases, config=config) for config in configs]
+        total = len(cases) * len(configs)
+        completed = 0
+        if progress_callback is not None:
+            await progress_callback(0, total)
+
+        results: list[ConfigMetrics] = []
+        for config in configs:
+            results.append(
+                await self._run_config(
+                    session,
+                    cases=cases,
+                    config=config,
+                    on_case_complete=self._progress_reporter(
+                        progress_callback,
+                        completed=completed,
+                        total=total,
+                    ),
+                )
+            )
+            completed += len(cases)
+        return results
+
+    @staticmethod
+    def _progress_reporter(
+        callback: ProgressCallback | None,
+        *,
+        completed: int,
+        total: int,
+    ) -> Callable[[], Awaitable[None]] | None:
+        if callback is None:
+            return None
+        current = completed
+
+        async def report() -> None:
+            nonlocal current
+            current += 1
+            await callback(current, total)
+
+        return report
 
     async def _run_config(
         self,
@@ -58,8 +99,13 @@ class EvaluationRunner:
         *,
         cases: Sequence[EvalCase],
         config: RetrievalConfig,
+        on_case_complete: Callable[[], Awaitable[None]] | None = None,
     ) -> ConfigMetrics:
-        results = [await self._run_case(session, case=case, config=config) for case in cases]
+        results: list[CaseMetrics] = []
+        for case in cases:
+            results.append(await self._run_case(session, case=case, config=config))
+            if on_case_complete is not None:
+                await on_case_complete()
         ragas_faithfulness = [
             result.ragas_faithfulness for result in results if result.ragas_faithfulness is not None
         ]

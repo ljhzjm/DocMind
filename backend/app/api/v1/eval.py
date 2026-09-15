@@ -1,13 +1,12 @@
-from functools import lru_cache
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from celery.exceptions import CeleryError
 from fastapi import APIRouter, Depends, HTTPException, status
+from kombu.exceptions import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_async_session
-from app.evaluation.runner import EvaluationRunner
-from app.evaluation.types import ConfigMetrics, EvalCase, RetrievalConfig
 from app.models.eval_dataset import EvalDatasetItem
 from app.repositories.eval import (
     create_eval_case,
@@ -16,26 +15,22 @@ from app.repositories.eval import (
 )
 from app.repositories.evaluation_runs import (
     create_evaluation_run,
+    fail_evaluation_run,
     get_evaluation_run,
     list_evaluation_runs,
 )
 from app.schemas.evaluation import (
-    CaseMetricsResponse,
-    ConfigMetricsResponse,
     EvalCaseCreateRequest,
     EvalCaseResponse,
     EvalDatasetSummary,
     EvalRunRequest,
     EvalRunResponse,
+    EvaluationRunAcceptedResponse,
     EvaluationRunSummary,
 )
+from app.workers.tasks import run_evaluation_task
 
 router = APIRouter(prefix="/eval", tags=["evaluation"])
-
-
-@lru_cache
-def get_evaluation_runner() -> EvaluationRunner:
-    return EvaluationRunner()
 
 
 @router.get("/datasets", response_model=list[EvalDatasetSummary])
@@ -77,12 +72,16 @@ async def add_dataset_case(
     return _case_response(case)
 
 
-@router.post("/run", response_model=EvalRunResponse)
+@router.post(
+    "/run",
+    response_model=EvaluationRunAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def run_evaluation(
     request: EvalRunRequest,
     session: Annotated[AsyncSession, Depends(get_async_session)],
-    runner: Annotated[EvaluationRunner, Depends(get_evaluation_runner)],
-) -> EvalRunResponse:
+) -> EvaluationRunAcceptedResponse:
+    """创建评测记录并立即返回 Celery 任务，不等待评测完成。"""
     stored_cases = await list_eval_cases(session, request.dataset_name)
     if not stored_cases:
         raise HTTPException(
@@ -90,37 +89,40 @@ async def run_evaluation(
             detail="evaluation dataset not found",
         )
 
-    cases = [
-        EvalCase(
-            id=case.id,
-            question=case.question,
-            reference_answer=case.reference_answer,
-            expected_chunk_ids=tuple(case.expected_chunk_ids),
-            tags=tuple(case.tags),
-        )
-        for case in stored_cases
-    ]
-    configs = [
-        RetrievalConfig(
-            name=config.name,
-            mode=config.mode,
-            top_k=config.top_k,
-            rerank=config.rerank,
-        )
-        for config in request.configs
-    ]
-    results = await runner.run(session, cases=cases, configs=configs)
-    response_results = [_config_response(result) for result in results]
+    run_id = uuid4()
+    task_id = f"evaluation-{run_id}"
+    progress_total = len(stored_cases) * len(request.configs)
     run = await create_evaluation_run(
         session,
+        run_id=run_id,
         dataset_name=request.dataset_name,
+        task_id=task_id,
+        progress_total=progress_total,
         configs=[config.model_dump(mode="json") for config in request.configs],
-        results=[result.model_dump(mode="json") for result in response_results],
     )
-    return EvalRunResponse(
+    try:
+        run_evaluation_task.apply_async(
+            args=[str(run.id)],
+            task_id=task_id,
+        )
+    except (CeleryError, OperationalError, OSError) as exc:
+        await fail_evaluation_run(
+            session,
+            run.id,
+            error_message="evaluation task could not be queued",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="evaluation task could not be queued",
+        ) from exc
+
+    return EvaluationRunAcceptedResponse(
         run_id=run.id,
-        dataset_name=request.dataset_name,
-        results=response_results,
+        dataset_name=run.dataset_name,
+        task_id=task_id,
+        status="queued",
+        progress_completed=0,
+        progress_total=progress_total,
     )
 
 
@@ -135,48 +137,6 @@ def _case_response(case: EvalDatasetItem) -> EvalCaseResponse:
     )
 
 
-def _config_response(result: ConfigMetrics) -> ConfigMetricsResponse:
-    return ConfigMetricsResponse(
-        name=result.config.name,
-        mode=result.config.mode,
-        top_k=result.config.top_k,
-        rerank=result.config.rerank,
-        case_count=result.case_count,
-        recall_at_5=result.recall_at_5,
-        mrr=result.mrr,
-        faithfulness=result.faithfulness,
-        answer_relevance=result.answer_relevance,
-        ragas_faithfulness=result.ragas_faithfulness,
-        ragas_answer_relevance=result.ragas_answer_relevance,
-        average_latency_ms=result.average_latency_ms,
-        average_first_token_latency_ms=result.average_first_token_latency_ms,
-        average_input_tokens=result.average_input_tokens,
-        average_output_tokens=result.average_output_tokens,
-        average_estimated_cost=result.average_estimated_cost,
-        refusal_rate=result.refusal_rate,
-        hallucination_risk=result.hallucination_risk,
-        cases=[
-            CaseMetricsResponse(
-                question=case.question,
-                recall_at_5=case.recall_at_5,
-                reciprocal_rank=case.reciprocal_rank,
-                faithfulness=case.faithfulness,
-                answer_relevance=case.answer_relevance,
-                ragas_faithfulness=case.ragas_faithfulness,
-                ragas_answer_relevance=case.ragas_answer_relevance,
-                latency_ms=case.latency_ms,
-                first_token_latency_ms=case.first_token_latency_ms,
-                input_tokens=case.input_tokens,
-                output_tokens=case.output_tokens,
-                estimated_cost=case.estimated_cost,
-                refused=case.refused,
-                error=case.error,
-            )
-            for case in result.cases
-        ],
-    )
-
-
 @router.get("/runs", response_model=list[EvaluationRunSummary])
 async def get_evaluation_runs(
     session: Annotated[AsyncSession, Depends(get_async_session)],
@@ -186,6 +146,9 @@ async def get_evaluation_runs(
         EvaluationRunSummary(
             run_id=run.id,
             dataset_name=run.dataset_name,
+            status=run.status,
+            progress_completed=run.progress_completed,
+            progress_total=run.progress_total,
             created_at=run.created_at.isoformat(),
         )
         for run in runs
@@ -204,6 +167,14 @@ async def get_evaluation_run_detail(
         {
             "run_id": run.id,
             "dataset_name": run.dataset_name,
+            "task_id": run.task_id,
+            "status": run.status,
+            "progress_completed": run.progress_completed,
+            "progress_total": run.progress_total,
+            "error_message": run.error_message,
+            "created_at": run.created_at.isoformat(),
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
             "results": run.results,
         }
     )

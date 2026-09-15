@@ -143,6 +143,8 @@ PDF 由 PyMuPDF 按页提取，Markdown 按标题解析。切片器优先保留�
 - 每次问答生成 `trace_id`，记录 rewrite、retrieve、rerank、generate 各阶段耗时和 token。
 - Redis 缓存键包含问题、知识库 revision 和检索配置；缓存命中在 SSE 中标记 `cached=true`。
 - Redis 令牌桶按 API Key 或 IP + 会话限流，超额返回 `429` 和 `Retry-After`。
+- 评测任务投递到独立 `evaluation` 队列，API 立即返回 `202` 和 `run_id`，前端轮询进度；
+  长时间评测不会阻塞文档解析 `ingestion` 队列。
 - 请求日志为结构化 JSON，响应包含 `X-Request-ID`；调试页可按 `trace_id` 回放。
 - `REQUIRE_API_KEY=true` 后，API 客户端携带 `X-API-Key`，浏览器通过登录页换取
   HttpOnly 会话 Cookie。
@@ -260,7 +262,7 @@ Caddy 使用 `DOMAIN` 自动申请并续期 Let's Encrypt 证书，同时把 HTT
 ```bash
 docker compose --profile app --profile tls up -d --build --wait
 docker compose --profile app --profile tls ps
-docker compose logs -f --tail=100 caddy backend worker
+docker compose logs -f --tail=100 caddy backend worker eval-worker
 ```
 
 验证：
@@ -288,7 +290,7 @@ docker compose ps
 
 ```bash
 docker compose --profile app --profile tls ps
-docker compose logs -f --tail=200 backend worker frontend caddy
+docker compose logs -f --tail=200 backend worker eval-worker frontend caddy
 ```
 
 每天备份 PostgreSQL：

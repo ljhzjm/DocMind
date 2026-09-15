@@ -110,6 +110,17 @@ def test_initial_migration_upgrade_and_downgrade(
                     """
                 )
             ).all()
+            evaluation_run_columns = set(
+                connection.scalars(
+                    text(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'evaluation_runs'
+                        """
+                    )
+                ).all()
+            )
 
         assert vector_type == "vector(1024)"
         assert embedding_is_nullable == "YES"
@@ -118,6 +129,15 @@ def test_initial_migration_upgrade_and_downgrade(
         assert "vector_cosine_ops" in hnsw_definition
         assert document_statuses == ["uploaded", "parsing", "ready", "failed"]
         assert usage_steps == ["rewrite", "retrieve", "rerank", "generate"]
+        assert {
+            "task_id",
+            "status",
+            "progress_completed",
+            "progress_total",
+            "error_message",
+            "started_at",
+            "completed_at",
+        }.issubset(evaluation_run_columns)
 
         command.downgrade(config, "base")
         assert "documents" not in inspect(engine).get_table_names()

@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -39,6 +40,9 @@ class EvalRunRequest(BaseModel):
     configs: list[RetrievalConfigRequest] = Field(min_length=1, max_length=8)
 
 
+EvaluationRunStatus = Literal["queued", "running", "completed", "failed"]
+
+
 class CaseMetricsResponse(BaseModel):
     question: str
     recall_at_5: float
@@ -78,13 +82,33 @@ class ConfigMetricsResponse(BaseModel):
     cases: list[CaseMetricsResponse]
 
 
+class EvaluationRunAcceptedResponse(BaseModel):
+    run_id: UUID
+    dataset_name: str
+    task_id: str
+    status: EvaluationRunStatus
+    progress_completed: int
+    progress_total: int
+
+
 class EvalRunResponse(BaseModel):
     run_id: UUID
     dataset_name: str
+    task_id: str | None
+    status: EvaluationRunStatus
+    progress_completed: int
+    progress_total: int
+    error_message: str | None
+    created_at: str
+    started_at: str | None
+    completed_at: str | None
     results: list[ConfigMetricsResponse]
 
 
 class EvaluationRunSummary(BaseModel):
     run_id: UUID
     dataset_name: str
+    status: EvaluationRunStatus
+    progress_completed: int
+    progress_total: int
     created_at: str

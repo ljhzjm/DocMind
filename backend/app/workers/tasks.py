@@ -3,6 +3,7 @@ from uuid import UUID
 
 from app.core.config import get_settings
 from app.db.session import get_async_session_factory, get_sync_session_factory
+from app.evaluation.executor import execute_evaluation_run
 from app.ingestion.embedding_backfill import backfill_document_embeddings
 from app.ingestion.service import ingest_document
 from app.workers.celery_app import celery_app
@@ -25,3 +26,9 @@ def backfill_document_embeddings_task(document_id: str) -> int:
             return await backfill_document_embeddings(session, UUID(document_id))
 
     return asyncio.run(run())
+
+
+@celery_app.task(name="docmind.evaluation.run")
+def run_evaluation_task(run_id: str) -> None:
+    """异步执行完整评测，并把进度和结果写回数据库。"""
+    asyncio.run(execute_evaluation_run(UUID(run_id)))

@@ -86,7 +86,8 @@ try {
         -ArgumentList @(
             'run', 'celery',
             '-A', 'app.workers.celery_app:celery_app',
-            'worker', '--loglevel=info', '--pool=solo'
+            'worker', '--loglevel=info', '--pool=solo',
+            '-Q', 'ingestion,evaluation'
         ) `
         -WorkingDirectory $backendRoot `
         -NoNewWindow `
