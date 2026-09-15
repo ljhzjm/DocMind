@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://127.0.0.1:15173,http://localhost:15173"
     require_api_key: bool = False
     api_keys: str = ""
+    session_secret_key: str = ""
+    session_cookie_name: str = "docmind_session"
+    session_ttl_seconds: int = 86400
+    trust_proxy_headers: bool = False
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE,
@@ -105,6 +109,17 @@ class Settings(BaseSettings):
             raise ValueError("rate_limit_refill_per_second must be positive")
         if self.max_upload_size_bytes <= 0:
             raise ValueError("max_upload_size_bytes must be positive")
+        if self.session_ttl_seconds <= 0:
+            raise ValueError("session_ttl_seconds must be positive")
+        if not self.session_cookie_name.strip():
+            raise ValueError("session_cookie_name must not be empty")
+        if self.require_api_key and not self.allowed_api_keys:
+            raise ValueError("api_keys must not be empty when require_api_key is true")
+        if self.require_api_key and len(self.session_secret_key) < 32:
+            raise ValueError(
+                "session_secret_key must contain at least 32 characters "
+                "when require_api_key is true"
+            )
         return self
 
 

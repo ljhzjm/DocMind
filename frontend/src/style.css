@@ -118,6 +118,23 @@ a {
   color: #0f665f;
 }
 
+.logout-button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8a4039;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+}
+
+.logout-button:hover {
+  background: #f5e5e2;
+}
+
 .app-content {
   width: min(100% - 2rem, 84rem);
   margin: 0 auto;

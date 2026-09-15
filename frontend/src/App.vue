@@ -3,12 +3,20 @@
 <!-- Vue 概念：根组件提供全局框架，页面组件只关注各自业务。 -->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   FileStack,
   FlaskConical,
+  LogOut,
   MessageSquareText,
   Search,
 } from 'lucide-vue-next'
+
+import { fetchAuthSession, logout } from './api/auth'
+
+const route = useRoute()
+const router = useRouter()
+const authRequired = ref(false)
 
 interface HealthPayload {
   status: string
@@ -42,12 +50,24 @@ async function checkModelStatus(retryCount = 0): Promise<void> {
 
 onMounted(() => {
   void checkModelStatus()
+  void fetchAuthSession()
+    .then((session) => {
+      authRequired.value = session.auth_required
+    })
+    .catch(() => {
+      authRequired.value = false
+    })
 })
+
+async function signOut(): Promise<void> {
+  await logout()
+  await router.replace('/login')
+}
 </script>
 
 <template>
   <div class="app-layout">
-    <header class="app-header">
+    <header v-if="route.name !== 'login'" class="app-header">
       <RouterLink class="brand" to="/chat">
         <span class="brand-mark">DM</span>
         <span>DocMind</span>
@@ -72,6 +92,16 @@ onMounted(() => {
           <FlaskConical :size="17" />
           评测
         </RouterLink>
+        <button
+          v-if="authRequired"
+          class="logout-button"
+          type="button"
+          aria-label="退出登录"
+          @click="signOut"
+        >
+          <LogOut :size="17" />
+          退出
+        </button>
       </nav>
     </header>
     <main class="app-content">

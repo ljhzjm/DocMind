@@ -1,5 +1,4 @@
 import logging
-import secrets
 from collections.abc import Awaitable, Callable
 from time import perf_counter
 from uuid import uuid4
@@ -8,6 +7,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.auth import client_ip, resolve_identity
 from app.core.config import get_settings
 from app.core.rate_limit import TokenBucketRateLimiter
 from app.observability.context import request_id_context, trace_id_context
@@ -42,7 +42,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """对 /api 请求执行 IP + 会话组合令牌桶限流。"""
+    """按认证身份限流，匿名请求按可信代理后的客户端 IP 限流。"""
 
     def __init__(self, app: object) -> None:
         super().__init__(app)  # type: ignore[arg-type]
@@ -53,11 +53,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         settings = get_settings()
-        client_ip = request.client.host if request.client else "unknown"
-        session_id = request.headers.get("x-session-id", "anonymous")
-        api_key = request.headers.get("x-api-key", "").strip()
-        identity = f"api-key:{api_key[:12]}" if api_key else f"{client_ip}:{session_id}"
-        decision = await self._limiter.check(identity)
+        identity = getattr(request.state, "auth_identity", None)
+        limiter_key = (
+            identity.rate_limit_key
+            if identity is not None
+            else f"ip:{client_ip(request, settings)}"
+        )
+        decision = await self._limiter.check(limiter_key)
         if not decision.allowed:
             return JSONResponse(
                 status_code=429,
@@ -71,22 +73,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
-    """生产环境可选 API Key 鉴权。"""
+    """支持 API Key 和浏览器 HttpOnly 会话认证。"""
 
     async def dispatch(self, request: Request, call_next: NextCall) -> Response:
         settings = get_settings()
+        if not request.url.path.startswith("/api"):
+            return await call_next(request)
+
+        identity = resolve_identity(request, settings)
+        request.state.auth_identity = identity
         if (
             not settings.require_api_key
-            or not request.url.path.startswith("/api")
             or request.url.path == "/api/health"
+            or request.url.path.startswith("/api/auth/session")
+            or identity is not None
         ):
             return await call_next(request)
 
-        provided_key = request.headers.get("x-api-key", "")
-        valid = any(
-            secrets.compare_digest(provided_key, allowed) for allowed in settings.allowed_api_keys
-        )
-        if not valid:
+        if identity is None:
             return JSONResponse(
                 status_code=401,
                 content={"detail": "invalid or missing API key"},

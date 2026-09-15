@@ -144,7 +144,8 @@ PDF 由 PyMuPDF 按页提取，Markdown 按标题解析。切片器优先保留�
 - Redis 缓存键包含问题、知识库 revision 和检索配置；缓存命中在 SSE 中标记 `cached=true`。
 - Redis 令牌桶按 API Key 或 IP + 会话限流，超额返回 `429` 和 `Retry-After`。
 - 请求日志为结构化 JSON，响应包含 `X-Request-ID`；调试页可按 `trace_id` 回放。
-- `REQUIRE_API_KEY=true` 后，除健康检查外的 `/api` 请求必须携带 `X-API-Key`。
+- `REQUIRE_API_KEY=true` 后，API 客户端携带 `X-API-Key`，浏览器通过登录页换取
+  HttpOnly 会话 Cookie。
 
 ## 评测结果
 
@@ -235,8 +236,10 @@ CADDY_HTTPS_PORT=443
 APP_ENV=production
 LOG_LEVEL=INFO
 CORS_ORIGINS=https://docmind.example.com
-REQUIRE_API_KEY=false
-API_KEYS=
+REQUIRE_API_KEY=true
+API_KEYS=<随机生成的访问密钥>
+SESSION_SECRET_KEY=<至少 32 字符的随机签名密钥>
+TRUST_PROXY_HEADERS=true
 DEEPSEEK_API_KEY=<供应商密钥>
 DASHSCOPE_API_KEY=<供应商密钥>
 RERANK_PROVIDER=llm
@@ -245,9 +248,10 @@ RERANK_PROVIDER=llm
 根目录 `.env` 和 `backend/.env` 已被 Git 忽略。不要把真实密钥写入
 `.env.example`、代码、镜像或 CI 日志。
 
-浏览器版前端目前不会自动为请求附加 `X-API-Key`，因此 SPA 部署保持
-`REQUIRE_API_KEY=false`。如果系统仅供 API 客户端调用，可以开启鉴权并配置
-`API_KEYS`；后续需要为浏览器增加登录态或由统一网关注入认证头。
+浏览器访问时会跳转到登录页。用户输入 `API_KEYS` 中的访问密钥后，后端签发
+HttpOnly、SameSite=Strict 的签名会话 Cookie，原始密钥不会写入浏览器的
+`localStorage`。`TRUST_PROXY_HEADERS=true` 只能在后端不直接暴露公网、
+请求必须经过 Caddy/Nginx 时使用。
 
 ### 4. 启动全栈和 HTTPS
 
