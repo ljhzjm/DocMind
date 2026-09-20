@@ -23,10 +23,13 @@ flowchart LR
     Gateway --> Chat[Chat API 供应商]
     Gateway --> Embedding[Embedding API 供应商]
     Gateway --> Rerank[重排 API 供应商]
-    Redis --> Worker[Celery Worker]
+    Redis --> Worker[Celery Ingestion Worker]
+    Redis --> EvalWorker[Celery Evaluation Worker]
     PDF[PDF / Markdown] --> API
     Worker --> PG
     Worker --> Upload
+    EvalWorker --> PG
+    EvalWorker --> Gateway
 ```
 
 ## 快速开始
@@ -45,10 +48,12 @@ cp backend/.env.example backend/.env
 ```dotenv
 DEEPSEEK_API_KEY=
 DASHSCOPE_API_KEY=
-RERANK_API_KEY=
 ```
 
-构建并启动 PostgreSQL、Redis、API、Worker 和前端：
+默认的 `RERANK_PROVIDER=llm` 复用聊天模型密钥。只有切换到独立 bge 重排服务时，
+才需要额外配置 `RERANK_API_KEY`。
+
+构建并启动 PostgreSQL、Redis、API、文档解析 Worker、评测 Worker 和前端：
 
 ```bash
 docker compose --profile app up -d --build --wait
@@ -97,15 +102,15 @@ Windows PowerShell：
 
 ### 结构感知切片
 
-PDF 由 PyMuPDF 按页提取，Markdown 按标题解析。切片器优先保留标题层级、页码和
-`heading_path`；只有超过配置上限的块才使用
-`RecursiveCharacterTextSplitter` 兜底。
+PDF 由 PyMuPDF 按页提取，Markdown 按 ATX 标题解析。切片器优先保留 Markdown 标题
+层级、页码和 `heading_path`；PDF 当前保留页码，但不会自动推断字体标题层级。只有
+超过配置上限的块才使用 `RecursiveCharacterTextSplitter` 兜底。
 
 - 叶子块默认 `CHUNK_SIZE=512`、`CHUNK_OVERLAP=64`。
 - `PARENT_CHILD_ENABLED=true` 时额外生成约 2048 字符的父块，检索叶子块后回传父块，
   兼顾召回精度与生成上下文完整性。
-- PDF 表格页会转换为 Markdown；`OCR_ENABLED=true` 时可对低文本密度的扫描页启用
-  Tesseract OCR。
+- PDF 表格页会转换为 Markdown；`OCR_ENABLED=true` 时，仅对完全无法提取文本的页面
+  启用 Tesseract OCR。包含页码水印但正文为图片的页面仍需后续增加文本密度判断。
 - 所有切片保存 `document_id`、`page_number`、`heading_path`、`parent_chunk_id`，
   因而可以稳定追溯引用来源。
 
@@ -129,20 +134,25 @@ PDF 由 PyMuPDF 按页提取，Markdown 按标题解析。切片器优先保留�
 ```
 
 流式解析器先读取并校验 `citations`，再逐段发送 `answer`。所有引用编号必须位于本次
-检索片段范围 `1..N` 内；格式错误、空答案或越界引用会触发一次自动重试。重试仍失败
-才向客户端返回结构化错误，避免把无效引用直接展示给用户。
+检索片段范围 `1..N` 内；格式错误、空答案或越界引用会触发一次自动重试。
+
+完整回答生成后还会执行逐句引用语义校验，判断每句话是否真的被引用片段支持。非流式
+生成语义校验失败会重新生成一次；流式生成时回答可能已经逐步展示，但校验失败不会发送
+`DoneEvent`，也不会写入缓存或会话消息。
 
 ### 拒答
 
-重排后若结果为空，或 top1 分数低于 `RAG_REFUSAL_THRESHOLD`，系统直接返回
-`未找到相关资料`，不会调用生成模型。该策略可以降低幻觉风险和无效 token 成本；
-阈值应使用评测集校准，而不是凭经验固定。
+重排后若结果为空，或 top1 分数低于有效拒答阈值，系统直接返回 `未找到相关资料`，
+不会调用生成模型。运行时优先读取按 `mode + top_k + reranker` 校准并持久化的阈值；
+没有校准记录时才回退 `RAG_REFUSAL_THRESHOLD`。阈值应使用评测集校准，而不是凭经验
+固定。
 
 ### 其他上线能力
 
 - 每次问答生成 `trace_id`，记录 rewrite、retrieve、rerank、generate 各阶段耗时和 token。
 - Redis 缓存键包含问题、知识库 revision 和检索配置；缓存命中在 SSE 中标记 `cached=true`。
-- Redis 令牌桶按 API Key 或 IP + 会话限流，超额返回 `429` 和 `Retry-After`。
+- Redis 令牌桶按已验证的 API Key/会话指纹限流；匿名请求按可信代理后的客户端 IP
+  限流，超额返回 `429` 和 `Retry-After`。
 - 评测任务投递到独立 `evaluation` 队列，API 立即返回 `202` 和 `run_id`，前端轮询进度；
   长时间评测不会阻塞文档解析 `ingestion` 队列。
 - 评测支持取消和失败续跑；每个完成样本写入 checkpoint，恢复时不会重复执行已完成样本。
@@ -274,7 +284,8 @@ docker compose logs -f --tail=100 caddy backend worker eval-worker
 ```bash
 curl -fsS https://docmind.example.com/healthz
 curl -fsS https://docmind.example.com/api/health
-curl -fsS "https://docmind.example.com/api/v1/search?q=测试&mode=hybrid"
+curl -fsS -H "X-API-Key: <接口密钥>" \
+  "https://docmind.example.com/api/v1/search?q=测试&mode=hybrid"
 ```
 
 首次签发证书要求域名已经解析、80/443 可从公网访问，且 DNS 没有错误代理。Caddy
