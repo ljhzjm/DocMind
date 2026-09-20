@@ -320,8 +320,6 @@ docker compose exec -T postgres \
 
 ## 已知问题与 TODO
 
-- 正式评测集尚未完成。需要人工校准至少 30 条，最终建议 100 至 150 条，并补齐真实
-  `expected_chunk_ids`。
 - `models.toml` 中部分模型价格仍为占位值，正式展示成本前必须按供应商当前价格更新。
 - OCR 默认关闭，需要宿主机安装 Tesseract 及中文语言包；复杂表格、公式和扫描件仍需
   人工抽样验收。
